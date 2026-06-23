@@ -36,6 +36,21 @@ async function broadcastRecording(state: RecState): Promise<void> {
   }
 }
 
+/**
+ * Inyecta el content script en una pestaña si aún no está presente.
+ * Necesario para pestañas abiertas antes de cargar/recargar la extensión.
+ */
+async function ensureContentScript(tabId: number): Promise<void> {
+  const files = chrome.runtime.getManifest().content_scripts?.[0]?.js;
+  if (!files?.length) return;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files });
+  } catch (err) {
+    // Páginas no inyectables (chrome://, web store, PDFs internos, etc.)
+    console.warn('[ManualLite] No se pudo inyectar en la pestaña:', err);
+  }
+}
+
 async function handleClick(
   capture: ClickCapture,
   windowId: number | undefined,
@@ -87,6 +102,9 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
       case 'START_RECORDING': {
         const next: RecState = { recording: true, manualId: message.manualId };
         await setState(next);
+        // Asegura que el content script esté presente en la pestaña activa
+        // (las pestañas abiertas antes de cargar la extensión no lo tienen).
+        if (message.tabId != null) await ensureContentScript(message.tabId);
         await broadcastRecording(next);
         sendResponse({ ok: true });
         break;

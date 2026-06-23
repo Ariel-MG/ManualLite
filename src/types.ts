@@ -57,7 +57,7 @@ export interface ClickCapture {
 }
 
 export type RuntimeMessage =
-  | { type: 'START_RECORDING'; manualId: string }
+  | { type: 'START_RECORDING'; manualId: string; tabId?: number }
   | { type: 'STOP_RECORDING' }
   | { type: 'GET_STATE' }
   | { type: 'STATE'; recording: boolean; manualId: string | null; stepCount: number }

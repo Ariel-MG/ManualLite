@@ -2,6 +2,13 @@ import type { ClickCapture, ClickedElement, RuntimeMessage } from '../types';
 import { extractElementText } from '../lib/caption';
 import { hideBadge, setCount, showBadge, withBadgeHidden } from './recorder';
 
+// Evita doble registro si el script se inyecta dos veces (manifest + on-demand).
+declare global {
+  interface Window {
+    __manualLiteInjected?: boolean;
+  }
+}
+
 let recording = false;
 let localCount = 0;
 
@@ -54,19 +61,26 @@ function applyState(isRecording: boolean, stepCount: number): void {
   else hideBadge();
 }
 
-// Estado inicial al cargar el content script.
-chrome.runtime
-  .sendMessage({ type: 'GET_STATE' } satisfies RuntimeMessage)
-  .then((res: { recording: boolean; stepCount: number } | undefined) => {
-    if (res) applyState(res.recording, res.stepCount ?? 0);
-  })
-  .catch(() => {});
+function init(): void {
+  if (window.__manualLiteInjected) return;
+  window.__manualLiteInjected = true;
 
-chrome.runtime.onMessage.addListener((message: RuntimeMessage) => {
-  if (message.type === 'RECORDING_CHANGED') {
-    applyState(message.recording, 0);
-  }
-});
+  // Estado inicial al cargar el content script.
+  chrome.runtime
+    .sendMessage({ type: 'GET_STATE' } satisfies RuntimeMessage)
+    .then((res: { recording: boolean; stepCount: number } | undefined) => {
+      if (res) applyState(res.recording, res.stepCount ?? 0);
+    })
+    .catch(() => {});
 
-// Capture phase para registrar el click antes de que la página reaccione/navegue.
-window.addEventListener('pointerdown', onPointerDown, { capture: true });
+  chrome.runtime.onMessage.addListener((message: RuntimeMessage) => {
+    if (message.type === 'RECORDING_CHANGED') {
+      applyState(message.recording, 0);
+    }
+  });
+
+  // Capture phase: registra el click antes de que la página reaccione/navegue.
+  window.addEventListener('pointerdown', onPointerDown, { capture: true });
+}
+
+init();

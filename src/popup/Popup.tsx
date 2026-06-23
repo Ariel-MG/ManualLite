@@ -44,13 +44,16 @@ export function Popup() {
 
   async function start() {
     setBusy(true);
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const manual = await createManual(title.trim() || 'Manual sin título');
     await chrome.runtime.sendMessage({
       type: 'START_RECORDING',
       manualId: manual.id,
+      tabId: tab?.id,
     } satisfies RuntimeMessage);
     await refresh();
     setBusy(false);
+    window.close(); // cierra el popup para que la captura no lo incluya
   }
 
   async function stop() {
