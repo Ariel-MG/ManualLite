@@ -1,5 +1,8 @@
 # ManualLite
 
+[![Build](https://github.com/Ariel-MG/ManualLite/actions/workflows/build.yml/badge.svg)](https://github.com/Ariel-MG/ManualLite/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 MVP local para crear **manuales de usuario** capturando una pantalla cada vez que haces click, al estilo de [Scribe](https://scribehow.com/). Genera el manual en **PDF (con portada e índice)**, **HTML** y **Markdown**.
 
 Todo corre **100% en tu navegador**: nada se sube a la nube. Las capturas y los manuales se guardan localmente en IndexedDB.
@@ -78,3 +81,7 @@ src/
 - Captura de página completa (full-page) con scroll.
 - Edición de la anotación (mover el marcador, recortar la imagen).
 - Difuminar zonas sensibles antes de exportar.
+
+## Licencia
+
+[MIT](LICENSE) © Ariel-MG
