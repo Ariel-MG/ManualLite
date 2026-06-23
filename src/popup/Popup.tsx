@@ -14,6 +14,10 @@ function openEditor(manualId: string): void {
   chrome.tabs.create({ url });
 }
 
+function openLibrary(): void {
+  chrome.tabs.create({ url: chrome.runtime.getURL('src/editor/index.html') });
+}
+
 export function Popup() {
   const [state, setState] = useState<State>({
     recording: false,
@@ -137,9 +141,15 @@ export function Popup() {
 
       {recent.length > 0 && (
         <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: 10 }}>
-          <p style={{ margin: '0 0 6px', fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>
-            MANUALES RECIENTES
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 6px' }}>
+            <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>MANUALES RECIENTES</span>
+            <button
+              onClick={openLibrary}
+              style={{ border: 'none', background: 'transparent', color: '#dc2626', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+            >
+              Ver todos →
+            </button>
+          </div>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {recent.slice(0, 5).map((m) => (
               <li key={m.id}>

@@ -81,6 +81,31 @@ export async function deleteManual(id: string): Promise<void> {
   await tx.done;
 }
 
+/** Crea una copia del manual y de todos sus pasos con nuevos ids. */
+export async function duplicateManual(id: string): Promise<Manual | undefined> {
+  const db = await getDB();
+  const source = await db.get('manuals', id);
+  if (!source) return undefined;
+  const now = Date.now();
+  const copy: Manual = {
+    ...source,
+    id: uid(),
+    title: `${source.title} (copia)`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const steps = await getSteps(id);
+  const tx = db.transaction(['manuals', 'steps'], 'readwrite');
+  await tx.objectStore('manuals').put(copy);
+  await Promise.all(
+    steps.map((s, i) =>
+      tx.objectStore('steps').put({ ...s, id: uid(), manualId: copy.id, order: i }),
+    ),
+  );
+  await tx.done;
+  return copy;
+}
+
 // --- Steps ---
 
 export async function addStep(

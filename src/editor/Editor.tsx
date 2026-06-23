@@ -4,7 +4,6 @@ import {
   deleteStep,
   getManual,
   getSteps,
-  listManuals,
   reorderSteps,
   updateManual,
   updateStep,
@@ -12,34 +11,51 @@ import {
 import { CoverForm } from './CoverForm';
 import { StepList } from './StepList';
 import { ExportBar } from './ExportBar';
+import { ManualLibrary } from './ManualLibrary';
 
 function getManualIdFromUrl(): string | null {
   return new URLSearchParams(location.search).get('id');
 }
 
 export function Editor() {
+  const [manualId, setManualId] = useState<string | null>(getManualIdFromUrl());
   const [manual, setManual] = useState<Manual | null>(null);
   const [steps, setSteps] = useState<Step[]>([]);
   const [loading, setLoading] = useState(true);
 
+  function openManual(id: string) {
+    history.pushState({}, '', `?id=${id}`);
+    setManualId(id);
+  }
+
+  function goToLibrary() {
+    history.pushState({}, '', location.pathname);
+    setManualId(null);
+  }
+
+  // Sincroniza con los botones atrás/adelante del navegador.
+  useEffect(() => {
+    const onPop = () => setManualId(getManualIdFromUrl());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   const load = useCallback(async () => {
-    let id = getManualIdFromUrl();
-    if (!id) {
-      // Sin id: abrir el manual más reciente, si existe.
-      const all = await listManuals();
-      id = all[0]?.id ?? null;
-    }
-    if (!id) {
+    if (!manualId) {
+      setManual(null);
       setLoading(false);
       return;
     }
-    const m = await getManual(id);
+    setLoading(true);
+    const m = await getManual(manualId);
     if (m) {
       setManual(m);
-      setSteps(await getSteps(id));
+      setSteps(await getSteps(manualId));
+    } else {
+      setManual(null);
     }
     setLoading(false);
-  }, []);
+  }, [manualId]);
 
   useEffect(() => {
     load();
@@ -77,6 +93,10 @@ export function Editor() {
     if (manual) setSteps(await getSteps(manual.id));
   }
 
+  if (!manualId) {
+    return <ManualLibrary onOpen={openManual} />;
+  }
+
   if (loading) {
     return <Centered>Cargando…</Centered>;
   }
@@ -84,7 +104,10 @@ export function Editor() {
   if (!manual) {
     return (
       <Centered>
-        No hay ningún manual todavía. Abre el popup de ManualLite y graba uno.
+        Este manual no existe.{' '}
+        <button onClick={goToLibrary} style={{ ...linkBtn }}>
+          Volver a Manuales
+        </button>
       </Centered>
     );
   }
@@ -100,20 +123,22 @@ export function Editor() {
           flexWrap: 'wrap',
         }}
       >
-        <div
+        <button
+          onClick={goToLibrary}
+          title="Volver a Manuales"
           style={{
-            width: 30,
-            height: 30,
+            border: '1px solid #d1d5db',
+            background: '#fff',
             borderRadius: 8,
-            background: '#dc2626',
-            color: '#fff',
-            display: 'grid',
-            placeItems: 'center',
-            fontWeight: 700,
+            padding: '7px 11px',
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+            color: '#374151',
           }}
         >
-          S
-        </div>
+          ← Manuales
+        </button>
         <strong style={{ fontSize: 18 }}>ManualLite</strong>
         <span style={{ color: '#9ca3af', fontSize: 13 }}>
           {steps.length} {steps.length === 1 ? 'paso' : 'pasos'}
@@ -150,6 +175,17 @@ export function Editor() {
     </div>
   );
 }
+
+const linkBtn: React.CSSProperties = {
+  border: 'none',
+  background: 'transparent',
+  color: '#dc2626',
+  fontSize: 15,
+  fontWeight: 600,
+  cursor: 'pointer',
+  textDecoration: 'underline',
+  padding: 0,
+};
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
