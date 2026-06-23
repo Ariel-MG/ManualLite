@@ -2,6 +2,7 @@ import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 import type { Manual, Step } from '../../types';
+import { DEFAULT_ACCENT } from '../../types';
 import { blobToDataURL, safeName } from '../blob';
 
 // pdfmake necesita su sistema de fuentes virtual (vfs). El shape ha cambiado
@@ -12,7 +13,6 @@ const vfs =
   (pdfFonts as unknown as { vfs: Record<string, string> }).vfs;
 (pdfMake as unknown as { vfs: Record<string, string> }).vfs = vfs;
 
-const ACCENT = '#dc2626';
 const PAGE_W = 595.28; // A4 en pt
 const MARGIN_X = 48;
 const PAGE_CONTENT_WIDTH = PAGE_W - MARGIN_X * 2;
@@ -34,6 +34,7 @@ function formatDate(ts: number): string {
 }
 
 export async function exportPdf(manual: Manual, steps: Step[]): Promise<void> {
+  const ACCENT = manual.accentColor ?? DEFAULT_ACCENT;
   const logoDataUrl = manual.logo ? await blobToDataURL(manual.logo) : undefined;
 
   // --- Portada ---

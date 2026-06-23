@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { Manual } from '../types';
+import { DEFAULT_ACCENT } from '../types';
 
 interface Props {
   manual: Manual;
-  onChange: (patch: Partial<Pick<Manual, 'title' | 'subtitle' | 'logo'>>) => void;
+  onChange: (patch: Partial<Pick<Manual, 'title' | 'subtitle' | 'logo' | 'accentColor'>>) => void;
 }
+
+const PRESET_COLORS = ['#dc2626', '#ea580c', '#d97706', '#16a34a', '#0891b2', '#2563eb', '#7c3aed', '#111827'];
 
 export function CoverForm({ manual, onChange }: Props) {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -56,6 +59,47 @@ export function CoverForm({ manual, onChange }: Props) {
             placeholder="Ej. Guía paso a paso"
           />
         </label>
+
+        <div style={lbl}>
+          Color de marca
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {PRESET_COLORS.map((c) => {
+              const active = (manual.accentColor ?? DEFAULT_ACCENT).toLowerCase() === c;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => onChange({ accentColor: c })}
+                  title={c}
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: c,
+                    cursor: 'pointer',
+                    border: active ? '2px solid #111827' : '2px solid #fff',
+                    boxShadow: '0 0 0 1px #e5e7eb',
+                  }}
+                />
+              );
+            })}
+            <input
+              type="color"
+              value={manual.accentColor ?? DEFAULT_ACCENT}
+              onChange={(e) => onChange({ accentColor: e.target.value })}
+              title="Color personalizado"
+              style={{
+                width: 32,
+                height: 28,
+                padding: 0,
+                border: '1px solid #d1d5db',
+                borderRadius: 6,
+                background: '#fff',
+                cursor: 'pointer',
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       <div style={{ flex: '0 0 200px', display: 'flex', flexDirection: 'column', gap: 8 }}>

@@ -35,9 +35,13 @@ export interface Manual {
   title: string;
   subtitle?: string;
   logo?: Blob; // logo de la portada
+  accentColor?: string; // color de marca (hex), p. ej. "#dc2626"
   createdAt: number;
   updatedAt: number;
 }
+
+/** Color de acento por defecto cuando el manual no define uno. */
+export const DEFAULT_ACCENT = '#dc2626';
 
 // --- Protocolo de mensajería (content ↔ background ↔ popup) ---
 

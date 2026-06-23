@@ -1,4 +1,5 @@
 import type { Manual, Step } from '../../types';
+import { DEFAULT_ACCENT } from '../../types';
 import { blobToDataURL, downloadBlob, safeName } from '../blob';
 
 function esc(s: string): string {
@@ -44,9 +45,10 @@ export async function exportHtml(manual: Manual, steps: Step[]): Promise<void> {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${esc(manual.title)}</title>
 <style>
-  :root { --accent:#dc2626; }
+  :root { --accent:${manual.accentColor ?? DEFAULT_ACCENT}; }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui,-apple-system,sans-serif; color:#111827; background:#f9fafb; }
+  body { margin:0; font-family: system-ui,-apple-system,sans-serif; color:#111827; background:#f9fafb; border-top:6px solid var(--accent); }
+  .cover .eyebrow { color:var(--accent); font-weight:700; letter-spacing:.18em; font-size:.8rem; margin:0 0 14px; }
   .wrap { max-width: 820px; margin: 0 auto; padding: 0 20px 80px; }
   .cover { text-align:center; padding: 80px 20px 50px; }
   .cover img { max-height: 110px; margin-bottom: 24px; }
@@ -67,6 +69,7 @@ export async function exportHtml(manual: Manual, steps: Step[]): Promise<void> {
 </head>
 <body>
   <div class="cover">
+    <p class="eyebrow">MANUAL DE USUARIO</p>
     ${logo ? `<img src="${logo}" alt="logo" />` : ''}
     <h1>${esc(manual.title)}</h1>
     ${manual.subtitle ? `<p class="sub">${esc(manual.subtitle)}</p>` : ''}
