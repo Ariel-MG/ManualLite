@@ -32,6 +32,7 @@ export async function exportHtml(manual: Manual, steps: Step[]): Promise<void> {
     <section class="step" id="step-${i + 1}">
       <h2><span class="num">${i + 1}</span> ${esc(s.caption)}</h2>
       <img src="${images[i]}" alt="${esc(s.caption)}" loading="lazy" />
+      ${s.description ? `<p class="desc">${esc(s.description).replace(/\n/g, '<br />')}</p>` : ''}
     </section>`,
     )
     .join('\n');
@@ -61,6 +62,7 @@ export async function exportHtml(manual: Manual, steps: Step[]): Promise<void> {
   .step h2 { display:flex; align-items:center; gap:12px; font-size:1.2rem; margin:0 0 16px; }
   .step .num { flex:none; width:30px; height:30px; border-radius:50%; background:var(--accent); color:#fff; display:grid; place-items:center; font-size:.95rem; }
   .step img { width:100%; height:auto; border:1px solid #e5e7eb; border-radius:8px; display:block; }
+  .step .desc { margin: 14px 0 0; color:#374151; line-height:1.6; font-size:.97rem; }
 </style>
 </head>
 <body>

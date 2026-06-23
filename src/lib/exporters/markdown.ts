@@ -40,6 +40,7 @@ export async function exportMarkdown(manual: Manual, steps: Step[]): Promise<voi
     imagesDir.file(`step-${i + 1}.png`, s.annotated ?? s.screenshot);
     lines.push(`## Paso ${i + 1}. ${s.caption}`, '');
     lines.push(`![Paso ${i + 1}](${file})`, '');
+    if (s.description) lines.push(s.description, '');
   }
 
   zip.file(`${safeName(manual.title)}.md`, lines.join('\n'));

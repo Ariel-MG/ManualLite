@@ -20,10 +20,11 @@ interface Props {
   steps: Step[];
   onReorder: (orderedIds: string[]) => void;
   onCaption: (id: string, caption: string) => void;
+  onDescription: (id: string, description: string) => void;
   onDelete: (id: string) => void;
 }
 
-export function StepList({ steps, onReorder, onCaption, onDelete }: Props) {
+export function StepList({ steps, onReorder, onCaption, onDescription, onDelete }: Props) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   // Object URLs por paso (se regeneran si cambia el set de imágenes).
@@ -78,6 +79,7 @@ export function StepList({ steps, onReorder, onCaption, onDelete }: Props) {
               index={i}
               url={urls[step.id]}
               onCaption={onCaption}
+              onDescription={onDescription}
               onDelete={onDelete}
             />
           ))}
@@ -92,12 +94,14 @@ function SortableStep({
   index,
   url,
   onCaption,
+  onDescription,
   onDelete,
 }: {
   step: Step;
   index: number;
   url?: string;
   onCaption: (id: string, caption: string) => void;
+  onDescription: (id: string, description: string) => void;
   onDelete: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -178,6 +182,22 @@ function SortableStep({
             }}
           />
         )}
+        <textarea
+          value={step.description ?? ''}
+          onChange={(e) => onDescription(step.id, e.target.value)}
+          placeholder="Añade una descripción para este paso (opcional)…"
+          rows={2}
+          style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: 6,
+            padding: '8px 10px',
+            fontSize: 13,
+            lineHeight: 1.5,
+            fontFamily: 'inherit',
+            resize: 'vertical',
+            color: '#374151',
+          }}
+        />
         <span style={{ fontSize: 11, color: '#9ca3af' }}>{step.url}</span>
       </div>
 

@@ -62,11 +62,9 @@ async function handleClick(
     y: capture.click.y * capture.dpr,
   };
 
-  const stepNumber = (await countSteps(state.manualId)) + 1;
   const { blob: annotated, width, height } = await annotateScreenshot(
     screenshot,
     clickOnImage,
-    stepNumber,
   );
 
   await addStep({

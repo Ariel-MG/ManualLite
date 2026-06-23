@@ -7,14 +7,15 @@ export interface AnnotateResult {
 }
 
 /**
- * Dibuja un marcador (anillo + número de paso) sobre la captura, en las
- * coordenadas del click. Usa OffscreenCanvas para poder correr dentro del
- * service worker (MV3 no tiene `document`).
+ * Dibuja un marcador (anillo hueco + halo) sobre la captura, en las
+ * coordenadas del click. Es hueco a propósito: sin número (que se
+ * desincronizaría al borrar pasos) y dejando ver el elemento clickeado.
+ * Usa OffscreenCanvas para poder correr dentro del service worker
+ * (MV3 no tiene `document`).
  */
 export async function annotateScreenshot(
   source: Blob,
   clickOnImage: ClickPoint,
-  stepNumber: number,
 ): Promise<AnnotateResult> {
   const bitmap = await createImageBitmap(source);
   const { width, height } = bitmap;
@@ -36,21 +37,19 @@ export async function annotateScreenshot(
   ctx.fillStyle = 'rgba(220, 38, 38, 0.18)';
   ctx.fill();
 
-  // Anillo principal
+  // Anillo hueco (solo contorno) para no tapar el elemento clickeado.
+  // Borde blanco exterior para contraste sobre fondos oscuros.
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.lineWidth = Math.max(5, radius * 0.28);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.stroke();
+
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.lineWidth = Math.max(3, radius * 0.18);
   ctx.strokeStyle = '#dc2626';
   ctx.stroke();
-  ctx.fillStyle = 'rgba(220, 38, 38, 0.9)';
-  ctx.fill();
-
-  // Número del paso
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `bold ${radius * 1.1}px system-ui, -apple-system, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(String(stepNumber), x, y + radius * 0.04);
 
   const blob = await canvas.convertToBlob({ type: 'image/png' });
   return { blob, width, height };

@@ -24,7 +24,8 @@ export interface Step {
   /** Punto del click ya escalado a las coords reales de la imagen capturada */
   clickOnImage: ClickPoint;
   element: ClickedElement;
-  caption: string; // editable: "Haz click en «Guardar»"
+  caption: string; // título del paso, editable: "Haz click en «Guardar»"
+  description?: string; // texto opcional bajo la imagen, editable
   url: string;
   createdAt: number;
 }

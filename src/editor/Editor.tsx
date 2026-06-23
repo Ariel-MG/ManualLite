@@ -56,6 +56,11 @@ export function Editor() {
     await updateStep(id, { caption });
   }
 
+  async function changeDescription(id: string, description: string) {
+    setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, description } : s)));
+    await updateStep(id, { description });
+  }
+
   async function removeStep(id: string) {
     await deleteStep(id);
     if (manual) setSteps(await getSteps(manual.id));
@@ -138,6 +143,7 @@ export function Editor() {
           steps={steps}
           onReorder={reorder}
           onCaption={changeCaption}
+          onDescription={changeDescription}
           onDelete={removeStep}
         />
       </div>
