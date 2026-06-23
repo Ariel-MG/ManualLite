@@ -141,11 +141,21 @@ export async function exportPdf(manual: Manual, steps: Step[]): Promise<void> {
     footer: (currentPage, pageCount) =>
       currentPage > 1
         ? {
-            text: `${currentPage} / ${pageCount}`,
-            alignment: 'center',
-            fontSize: 9,
-            color: '#9ca3af',
-            margin: [0, 16, 0, 0],
+            margin: [MARGIN_X, 12, MARGIN_X, 0],
+            stack: [
+              {
+                canvas: [
+                  { type: 'line', x1: 0, y1: 0, x2: PAGE_CONTENT_WIDTH, y2: 0, lineWidth: 0.5, lineColor: '#e5e7eb' },
+                ],
+              },
+              {
+                text: `Página ${currentPage} de ${pageCount}`,
+                alignment: 'center',
+                fontSize: 9,
+                color: '#9ca3af',
+                margin: [0, 6, 0, 0],
+              },
+            ],
           }
         : '',
   };
