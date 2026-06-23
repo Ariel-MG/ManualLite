@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Manual } from '../types';
 import { deleteManual, duplicateManual, listManuals, updateManual } from '../db';
+import { exportProjectById, importProject } from '../lib/project';
 
 interface Props {
   onOpen: (id: string) => void;
@@ -42,6 +43,19 @@ export function ManualLibrary({ onOpen }: Props) {
     await refresh();
   }
 
+  async function onImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const id = await importProject(file);
+      await refresh();
+      onOpen(id);
+    } catch (err) {
+      alert('No se pudo importar: ' + (err as Error).message);
+    }
+  }
+
   return (
     <div style={{ maxWidth: 880, margin: '0 auto', padding: '24px 20px 80px' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22 }}>
@@ -63,6 +77,21 @@ export function ManualLibrary({ onOpen }: Props) {
         <span style={{ color: '#9ca3af', fontSize: 13 }}>
           {manuals.length} {manuals.length === 1 ? 'manual' : 'manuales'}
         </span>
+        <label
+          style={{
+            marginLeft: 'auto',
+            padding: '8px 12px',
+            background: '#111827',
+            color: '#fff',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          ⬆ Importar .json
+          <input type="file" accept="application/json,.json" onChange={onImport} style={{ display: 'none' }} />
+        </label>
       </header>
 
       {manuals.length === 0 ? (
@@ -144,6 +173,9 @@ export function ManualLibrary({ onOpen }: Props) {
                 </button>
                 <button onClick={() => duplicate(m.id)} style={action('#f3f4f6', '#374151')}>
                   Duplicar
+                </button>
+                <button onClick={() => exportProjectById(m)} style={action('#f3f4f6', '#374151')}>
+                  Exportar
                 </button>
                 <button onClick={() => remove(m)} style={action('#fef2f2', '#dc2626')}>
                   Borrar
