@@ -20,6 +20,8 @@ interface Props {
   onApply: (patch: ImagePatch) => void;
 }
 
+type Tool = 'crop' | 'blur';
+
 const MAX_DISPLAY_W = 820;
 
 /** Normaliza un rect con anchos/altos posiblemente negativos. */
@@ -37,9 +39,12 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Dimensiones de visualización (la imagen natural se escala por CSS).
   const [display, setDisplay] = useState({ w: 0, h: 0, scale: 1 });
+  const [tool, setTool] = useState<Tool>('crop');
   const [crop, setCrop] = useState<Rect | null>(null);
+  const [redactions, setRedactions] = useState<Rect[]>([]);
+  const [redactStyle, setRedactStyle] = useState<'blur' | 'solid'>('blur');
+  const [temp, setTemp] = useState<Rect | null>(null);
   const dragging = useRef(false);
 
   useEffect(() => {
@@ -68,57 +73,114 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = pointer(e);
     dragging.current = true;
-    setCrop({ x: p.x, y: p.y, w: 0, h: 0 });
+    setTemp({ x: p.x, y: p.y, w: 0, h: 0 });
   }
 
   function onMove(e: React.PointerEvent) {
-    if (!dragging.current || !crop) return;
+    if (!dragging.current || !temp) return;
     const p = pointer(e);
-    setCrop({ ...crop, w: p.x - crop.x, h: p.y - crop.y });
+    setTemp({ ...temp, w: p.x - temp.x, h: p.y - temp.y });
   }
 
   function onUp() {
     dragging.current = false;
+    if (temp) {
+      const r = norm(temp);
+      if (r.w >= 5 && r.h >= 5) {
+        if (tool === 'crop') setCrop(r);
+        else setRedactions((prev) => [...prev, r]);
+      }
+    }
+    setTemp(null);
   }
 
-  async function apply() {
+  function toNatural(r: Rect): Rect {
+    const s = 1 / display.scale;
+    return { x: Math.round(r.x * s), y: Math.round(r.y * s), w: Math.round(r.w * s), h: Math.round(r.h * s) };
+  }
+
+  async function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+    return new Promise((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'));
+  }
+
+  async function applyCrop() {
     if (!crop) return;
-    const c = norm(crop);
+    const c = toNatural(crop);
     if (c.w < 5 || c.h < 5) return;
-
-    const img = imgRef.current!;
-    const s = 1 / display.scale; // display → coords naturales
-    const sx = Math.round(c.x * s);
-    const sy = Math.round(c.y * s);
-    const sw = Math.round(c.w * s);
-    const sh = Math.round(c.h * s);
-
     const canvas = document.createElement('canvas');
-    canvas.width = sw;
-    canvas.height = sh;
+    canvas.width = c.w;
+    canvas.height = c.h;
     const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-
-    const blob = await new Promise<Blob>((resolve) =>
-      canvas.toBlob((b) => resolve(b!), 'image/png'),
-    );
-    onApply({ annotated: blob, width: sw, height: sh });
+    ctx.drawImage(imgRef.current!, c.x, c.y, c.w, c.h, 0, 0, c.w, c.h);
+    onApply({ annotated: await canvasToBlob(canvas), width: c.w, height: c.h });
   }
 
-  const c = crop ? norm(crop) : null;
+  async function applyRedactions() {
+    if (!redactions.length) return;
+    const img = imgRef.current!;
+    const natW = img.naturalWidth;
+    const natH = img.naturalHeight;
+    const canvas = document.createElement('canvas');
+    canvas.width = natW;
+    canvas.height = natH;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+
+    for (const rd of redactions) {
+      const r = toNatural(rd);
+      if (redactStyle === 'solid') {
+        ctx.fillStyle = '#111827';
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+      } else {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(r.x, r.y, r.w, r.h);
+        ctx.clip();
+        ctx.filter = `blur(${Math.max(8, Math.min(r.w, r.h) * 0.18)}px)`;
+        ctx.drawImage(canvas, 0, 0); // redibuja la imagen ya difuminada solo en la zona
+        ctx.restore();
+      }
+    }
+    ctx.filter = 'none';
+    onApply({ annotated: await canvasToBlob(canvas), width: natW, height: natH });
+  }
+
+  const tempN = temp ? norm(temp) : null;
+  const canApply = tool === 'crop' ? !!crop : redactions.length > 0;
 
   return (
     <div style={overlay} onClick={onClose}>
       <div style={modal} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-          <strong style={{ fontSize: 15 }}>Recortar imagen</strong>
-          <span style={{ marginLeft: 10, fontSize: 12, color: '#6b7280' }}>
-            Arrastra para seleccionar el área a conservar.
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+          <strong style={{ fontSize: 15 }}>Editar imagen</strong>
+          <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 3 }}>
+            <button onClick={() => setTool('crop')} style={tab(tool === 'crop')}>
+              ▭ Recortar
+            </button>
+            <button onClick={() => setTool('blur')} style={tab(tool === 'blur')}>
+              ◧ Difuminar
+            </button>
+          </div>
+          {tool === 'blur' && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: '#374151' }}>
+              <label style={{ display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
+                <input type="radio" checked={redactStyle === 'blur'} onChange={() => setRedactStyle('blur')} /> Difuminar
+              </label>
+              <label style={{ display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
+                <input type="radio" checked={redactStyle === 'solid'} onChange={() => setRedactStyle('solid')} /> Tapar
+              </label>
+            </div>
+          )}
           <button onClick={onClose} style={{ marginLeft: 'auto', ...iconBtn }}>
             ✕
           </button>
         </div>
+
+        <p style={{ margin: '0 0 10px', fontSize: 12, color: '#6b7280' }}>
+          {tool === 'crop'
+            ? 'Arrastra para seleccionar el área a conservar.'
+            : 'Arrastra sobre cada zona sensible para ocultarla. Puedes marcar varias.'}
+        </p>
 
         <div style={{ display: 'grid', placeItems: 'center', background: '#f3f4f6', borderRadius: 8, padding: 12, overflow: 'auto' }}>
           <div
@@ -136,16 +198,54 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
               style={{ display: 'block', width: display.w || 'auto', userSelect: 'none' }}
               alt={step.caption}
             />
-            {c && c.w > 0 && c.h > 0 && (
+
+            {/* Zonas de difuminado ya marcadas */}
+            {tool === 'blur' &&
+              redactions.map((r, i) => (
+                <div
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    left: r.x,
+                    top: r.y,
+                    width: r.w,
+                    height: r.h,
+                    background: redactStyle === 'solid' ? 'rgba(17,24,39,0.85)' : 'rgba(17,24,39,0.35)',
+                    backdropFilter: redactStyle === 'blur' ? 'blur(6px)' : undefined,
+                    border: '1px solid rgba(255,255,255,0.6)',
+                    pointerEvents: 'none',
+                  }}
+                />
+              ))}
+
+            {/* Selección de recorte ya fijada */}
+            {tool === 'crop' && crop && !temp && (
               <div
                 style={{
                   position: 'absolute',
-                  left: c.x,
-                  top: c.y,
-                  width: c.w,
-                  height: c.h,
+                  left: crop.x,
+                  top: crop.y,
+                  width: crop.w,
+                  height: crop.h,
                   border: '2px solid #dc2626',
                   boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)',
+                  pointerEvents: 'none',
+                }}
+              />
+            )}
+
+            {/* Rectángulo en curso de arrastre */}
+            {tempN && tempN.w > 0 && tempN.h > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: tempN.x,
+                  top: tempN.y,
+                  width: tempN.w,
+                  height: tempN.h,
+                  border: `2px solid ${tool === 'crop' ? '#dc2626' : '#2563eb'}`,
+                  background: tool === 'blur' ? 'rgba(37,99,235,0.15)' : undefined,
+                  boxShadow: tool === 'crop' ? '0 0 0 9999px rgba(0,0,0,0.45)' : undefined,
                   pointerEvents: 'none',
                 }}
               />
@@ -153,22 +253,34 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
-          {crop && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 14, alignItems: 'center' }}>
+          {tool === 'blur' && redactions.length > 0 && (
+            <>
+              <button onClick={() => setRedactions((p) => p.slice(0, -1))} style={btn('#f3f4f6', '#374151')}>
+                Deshacer última
+              </button>
+              <button onClick={() => setRedactions([])} style={btn('#f3f4f6', '#374151')}>
+                Limpiar ({redactions.length})
+              </button>
+            </>
+          )}
+          {tool === 'crop' && crop && (
             <button onClick={() => setCrop(null)} style={btn('#f3f4f6', '#374151')}>
               Limpiar selección
             </button>
           )}
-          <button onClick={onClose} style={btn('#f3f4f6', '#374151')}>
-            Cancelar
-          </button>
-          <button
-            onClick={apply}
-            disabled={!c || c.w < 5 || c.h < 5}
-            style={{ ...btn('#dc2626', '#fff'), opacity: !c || c.w < 5 || c.h < 5 ? 0.5 : 1 }}
-          >
-            Aplicar recorte
-          </button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button onClick={onClose} style={btn('#f3f4f6', '#374151')}>
+              Cancelar
+            </button>
+            <button
+              onClick={() => (tool === 'crop' ? applyCrop() : applyRedactions())}
+              disabled={!canApply}
+              style={{ ...btn('#dc2626', '#fff'), opacity: canApply ? 1 : 0.5 }}
+            >
+              {tool === 'crop' ? 'Aplicar recorte' : 'Aplicar y guardar'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -205,6 +317,20 @@ const iconBtn: React.CSSProperties = {
   cursor: 'pointer',
   fontSize: 14,
 };
+
+function tab(active: boolean): React.CSSProperties {
+  return {
+    border: 'none',
+    background: active ? '#fff' : 'transparent',
+    color: active ? '#111827' : '#6b7280',
+    borderRadius: 6,
+    padding: '6px 12px',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.12)' : undefined,
+  };
+}
 
 function btn(bg: string, color: string): React.CSSProperties {
   return {
