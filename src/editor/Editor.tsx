@@ -12,6 +12,7 @@ import { CoverForm } from './CoverForm';
 import { StepList } from './StepList';
 import { ExportBar } from './ExportBar';
 import { ManualLibrary } from './ManualLibrary';
+import { StepImageEditor, type ImagePatch } from './StepImageEditor';
 
 function getManualIdFromUrl(): string | null {
   return new URLSearchParams(location.search).get('id');
@@ -22,6 +23,7 @@ export function Editor() {
   const [manual, setManual] = useState<Manual | null>(null);
   const [steps, setSteps] = useState<Step[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editImage, setEditImage] = useState<Step | null>(null);
 
   function openManual(id: string) {
     history.pushState({}, '', `?id=${id}`);
@@ -91,6 +93,14 @@ export function Editor() {
 
   async function refreshSteps() {
     if (manual) setSteps(await getSteps(manual.id));
+  }
+
+  async function applyImagePatch(patch: ImagePatch) {
+    if (!editImage) return;
+    const id = editImage.id;
+    setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    await updateStep(id, patch);
+    setEditImage(null);
   }
 
   if (!manualId) {
@@ -169,9 +179,18 @@ export function Editor() {
           onReorder={reorder}
           onCaption={changeCaption}
           onDescription={changeDescription}
+          onEditImage={setEditImage}
           onDelete={removeStep}
         />
       </div>
+
+      {editImage && (
+        <StepImageEditor
+          step={editImage}
+          onClose={() => setEditImage(null)}
+          onApply={applyImagePatch}
+        />
+      )}
     </div>
   );
 }

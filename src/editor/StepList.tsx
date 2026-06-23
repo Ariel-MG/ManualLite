@@ -21,10 +21,11 @@ interface Props {
   onReorder: (orderedIds: string[]) => void;
   onCaption: (id: string, caption: string) => void;
   onDescription: (id: string, description: string) => void;
+  onEditImage: (step: Step) => void;
   onDelete: (id: string) => void;
 }
 
-export function StepList({ steps, onReorder, onCaption, onDescription, onDelete }: Props) {
+export function StepList({ steps, onReorder, onCaption, onDescription, onEditImage, onDelete }: Props) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   // Object URLs por paso (se regeneran si cambia el set de imágenes).
@@ -80,6 +81,7 @@ export function StepList({ steps, onReorder, onCaption, onDescription, onDelete 
               url={urls[step.id]}
               onCaption={onCaption}
               onDescription={onDescription}
+              onEditImage={onEditImage}
               onDelete={onDelete}
             />
           ))}
@@ -95,6 +97,7 @@ function SortableStep({
   url,
   onCaption,
   onDescription,
+  onEditImage,
   onDelete,
 }: {
   step: Step;
@@ -102,6 +105,7 @@ function SortableStep({
   url?: string;
   onCaption: (id: string, caption: string) => void;
   onDescription: (id: string, description: string) => void;
+  onEditImage: (step: Step) => void;
   onDelete: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -171,16 +175,38 @@ function SortableStep({
           }}
         />
         {url && (
-          <img
-            src={url}
-            alt={step.caption}
-            style={{
-              width: '100%',
-              maxWidth: 640,
-              border: '1px solid #e5e7eb',
-              borderRadius: 8,
-            }}
-          />
+          <div style={{ position: 'relative', width: 'fit-content', maxWidth: '100%' }}>
+            <img
+              src={url}
+              alt={step.caption}
+              style={{
+                width: '100%',
+                maxWidth: 640,
+                border: '1px solid #e5e7eb',
+                borderRadius: 8,
+                display: 'block',
+              }}
+            />
+            <button
+              onClick={() => onEditImage(step)}
+              title="Editar imagen"
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                border: 'none',
+                background: 'rgba(17,24,39,0.85)',
+                color: '#fff',
+                borderRadius: 7,
+                padding: '6px 10px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              ✎ Editar imagen
+            </button>
+          </div>
         )}
         <textarea
           value={step.description ?? ''}
