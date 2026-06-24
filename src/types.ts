@@ -11,22 +11,32 @@ export interface ClickedElement {
   role?: string;
 }
 
+/**
+ * Tipo de paso:
+ * - 'action': capturado por click (tiene imagen).
+ * - 'section': encabezado de sección (agrupa pasos, sale en el índice).
+ * - 'note': nota/aviso de solo texto.
+ */
+export type StepKind = 'action' | 'section' | 'note';
+
 export interface Step {
   id: string;
   manualId: string;
   order: number;
-  screenshot: Blob; // captura PNG del viewport
+  kind: StepKind;
+  caption: string; // título del paso / texto de la sección
+  description?: string; // texto opcional (cuerpo de la nota o detalle del paso)
+  // Campos de imagen: solo para 'action'.
+  screenshot?: Blob; // captura PNG del viewport
   annotated?: Blob; // captura con el marcador dibujado encima
   /** Tamaño en px de la imagen anotada, para mantener proporción al exportar */
-  width: number;
-  height: number;
-  click: ClickPoint;
+  width?: number;
+  height?: number;
+  click?: ClickPoint;
   /** Punto del click ya escalado a las coords reales de la imagen capturada */
-  clickOnImage: ClickPoint;
-  element: ClickedElement;
-  caption: string; // título del paso, editable: "Haz click en «Guardar»"
-  description?: string; // texto opcional bajo la imagen, editable
-  url: string;
+  clickOnImage?: ClickPoint;
+  element?: ClickedElement;
+  url?: string;
   createdAt: number;
 }
 

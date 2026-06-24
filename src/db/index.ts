@@ -127,7 +127,22 @@ export async function addStep(
 export async function getSteps(manualId: string): Promise<Step[]> {
   const db = await getDB();
   const steps = await db.getAllFromIndex('steps', 'by-manual', manualId);
+  // Compatibilidad: pasos antiguos sin `kind` son acciones.
+  for (const s of steps) if (!s.kind) s.kind = 'action';
   return steps.sort((a, b) => a.order - b.order);
+}
+
+/** Añade un paso de solo texto (sección o nota) al final del manual. */
+export async function addTextStep(
+  manualId: string,
+  kind: 'section' | 'note',
+): Promise<Step> {
+  return addStep({
+    manualId,
+    kind,
+    caption: kind === 'section' ? 'Nueva sección' : '',
+    description: kind === 'note' ? 'Escribe aquí tu nota…' : undefined,
+  });
 }
 
 export async function countSteps(manualId: string): Promise<number> {

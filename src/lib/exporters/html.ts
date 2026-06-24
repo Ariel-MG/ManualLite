@@ -18,9 +18,6 @@ export async function exportHtml(
   quality: ImageQuality = 'medium',
 ): Promise<void> {
   const logo = manual.logo ? await blobToDataURL(manual.logo) : '';
-  const images = await Promise.all(
-    steps.map((s) => exportImageDataUrl(s.annotated ?? s.screenshot, quality)),
-  );
 
   const date = new Date(manual.createdAt).toLocaleDateString('es', {
     year: 'numeric',
@@ -34,20 +31,42 @@ export async function exportHtml(
     date,
   ].filter(Boolean) as string[];
 
-  const toc = steps
-    .map((s, i) => `<li><a href="#step-${i + 1}">Paso ${i + 1}. ${esc(s.caption)}</a></li>`)
-    .join('\n');
+  const tocItems: string[] = [];
+  const bodyParts: string[] = [];
+  let actionNo = 0;
 
-  const body = steps
-    .map(
-      (s, i) => `
-    <section class="step" id="step-${i + 1}">
-      <h2><span class="num">${i + 1}</span> ${esc(s.caption)}</h2>
-      <img src="${images[i]}" alt="${esc(s.caption)}" loading="lazy" />
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    const anchor = `step-${i + 1}`;
+
+    if (s.kind === 'section') {
+      tocItems.push(`<li class="toc-section"><a href="#${anchor}">${esc(s.caption)}</a></li>`);
+      bodyParts.push(`<h2 class="section" id="${anchor}">${esc(s.caption)}</h2>`);
+      continue;
+    }
+    if (s.kind === 'note') {
+      if (!s.description?.trim()) continue;
+      bodyParts.push(
+        `<div class="note" id="${anchor}"><strong>Nota</strong> ${esc(s.description).replace(/\n/g, '<br />')}</div>`,
+      );
+      continue;
+    }
+
+    const img = s.annotated ?? s.screenshot;
+    if (!img) continue;
+    actionNo += 1;
+    const dataUrl = await exportImageDataUrl(img, quality);
+    tocItems.push(`<li><a href="#${anchor}">Paso ${actionNo}. ${esc(s.caption)}</a></li>`);
+    bodyParts.push(`
+    <section class="step" id="${anchor}">
+      <h2><span class="num">${actionNo}</span> ${esc(s.caption)}</h2>
+      <img src="${dataUrl}" alt="${esc(s.caption)}" loading="lazy" />
       ${s.description ? `<p class="desc">${esc(s.description).replace(/\n/g, '<br />')}</p>` : ''}
-    </section>`,
-    )
-    .join('\n');
+    </section>`);
+  }
+
+  const toc = tocItems.join('\n');
+  const body = bodyParts.join('\n');
 
   const html = `<!doctype html>
 <html lang="es">
@@ -78,6 +97,10 @@ export async function exportHtml(
   .step .num { flex:none; width:30px; height:30px; border-radius:50%; background:var(--accent); color:#fff; display:grid; place-items:center; font-size:.95rem; }
   .step img { width:100%; height:auto; border:1px solid #e5e7eb; border-radius:8px; display:block; }
   .step .desc { margin: 14px 0 0; color:#374151; line-height:1.6; font-size:.97rem; }
+  h2.section { color:var(--accent); font-size:1.6rem; margin: 34px 0 8px; padding-bottom:8px; border-bottom:2px solid var(--accent); scroll-margin-top:20px; }
+  .note { background:#fffbeb; border:1px solid #fde68a; border-left:4px solid var(--accent); border-radius:8px; padding:14px 16px; margin: 0 0 26px; color:#92400e; line-height:1.6; }
+  .note strong { color:var(--accent); }
+  .toc-section a { font-weight:700; }
 </style>
 </head>
 <body>

@@ -110,6 +110,7 @@ async function handleClick(capture: ClickCapture, windowId: number | undefined):
 
   await addStep({
     manualId: state.manualId,
+    kind: 'action',
     screenshot,
     annotated,
     width,

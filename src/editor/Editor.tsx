@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Manual, Step } from '../types';
 import {
+  addTextStep,
   deleteStep,
   getManual,
   getSteps,
@@ -110,6 +111,12 @@ export function Editor() {
     if (manual) setSteps(await getSteps(manual.id));
   }
 
+  async function addText(kind: 'section' | 'note') {
+    if (!manual) return;
+    await addTextStep(manual.id, kind);
+    setSteps(await getSteps(manual.id));
+  }
+
   async function applyImagePatch(patch: ImagePatch) {
     if (!editImage) return;
     const id = editImage.id;
@@ -189,6 +196,14 @@ export function Editor() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <CoverForm manual={manual} onChange={patchManual} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => addText('section')} style={addBtn}>
+            + Sección
+          </button>
+          <button onClick={() => addText('note')} style={addBtn}>
+            + Nota
+          </button>
+        </div>
         <StepList
           steps={steps}
           onReorder={reorder}
@@ -209,6 +224,17 @@ export function Editor() {
     </div>
   );
 }
+
+const addBtn: React.CSSProperties = {
+  padding: '8px 14px',
+  background: '#fff',
+  border: '1px dashed #d1d5db',
+  borderRadius: 8,
+  fontSize: 13,
+  fontWeight: 600,
+  color: '#374151',
+  cursor: 'pointer',
+};
 
 const linkBtn: React.CSSProperties = {
   border: 'none',

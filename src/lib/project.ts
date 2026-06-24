@@ -6,15 +6,16 @@ const FORMAT = 'ManualLite';
 const FORMAT_VERSION = 1;
 
 interface SerializedStep {
+  kind?: Step['kind'];
   caption: string;
   description?: string;
-  url: string;
-  width: number;
-  height: number;
-  click: Step['click'];
-  clickOnImage: Step['clickOnImage'];
-  element: Step['element'];
-  screenshot: string; // dataURL
+  url?: string;
+  width?: number;
+  height?: number;
+  click?: Step['click'];
+  clickOnImage?: Step['clickOnImage'];
+  element?: Step['element'];
+  screenshot?: string; // dataURL (solo acciones)
   annotated?: string; // dataURL
 }
 
@@ -61,6 +62,7 @@ export async function exportProject(manual: Manual, steps: Step[]): Promise<void
     },
     steps: await Promise.all(
       steps.map(async (s) => ({
+        kind: s.kind,
         caption: s.caption,
         description: s.description,
         url: s.url,
@@ -69,7 +71,7 @@ export async function exportProject(manual: Manual, steps: Step[]): Promise<void
         click: s.click,
         clickOnImage: s.clickOnImage,
         element: s.element,
-        screenshot: await blobToDataURL(s.screenshot),
+        screenshot: s.screenshot ? await blobToDataURL(s.screenshot) : undefined,
         annotated: s.annotated ? await blobToDataURL(s.annotated) : undefined,
       })),
     ),
@@ -101,7 +103,8 @@ export async function importProject(file: File): Promise<string> {
   for (const s of parsed.steps) {
     await addStep({
       manualId: manual.id,
-      screenshot: await dataUrlToBlob(s.screenshot),
+      kind: s.kind ?? 'action',
+      screenshot: s.screenshot ? await dataUrlToBlob(s.screenshot) : undefined,
       annotated: s.annotated ? await dataUrlToBlob(s.annotated) : undefined,
       width: s.width,
       height: s.height,

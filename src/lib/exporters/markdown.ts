@@ -40,19 +40,35 @@ export async function exportMarkdown(
 
   // Índice
   lines.push('## Índice', '');
-  steps.forEach((s, i) => {
-    const anchor = `paso-${i + 1}-${slug(s.caption)}`;
-    lines.push(`${i + 1}. [Paso ${i + 1}. ${s.caption}](#${anchor})`);
+  let n = 0;
+  steps.forEach((s) => {
+    if (s.kind === 'section') {
+      lines.push(`- **${s.caption}**`);
+    } else if (s.kind !== 'note') {
+      n += 1;
+      lines.push(`${n}. [Paso ${n}. ${s.caption}](#paso-${n}-${slug(s.caption)})`);
+    }
   });
   lines.push('');
 
-  // Pasos
-  for (let i = 0; i < steps.length; i++) {
-    const s = steps[i];
-    const name = `step-${i + 1}.${ext}`;
-    imagesDir.file(name, await reencode(s.annotated ?? s.screenshot, quality));
-    lines.push(`## Paso ${i + 1}. ${s.caption}`, '');
-    lines.push(`![Paso ${i + 1}](images/${name})`, '');
+  // Cuerpo
+  let actionNo = 0;
+  for (const s of steps) {
+    if (s.kind === 'section') {
+      lines.push(`# ${s.caption || 'Sección'}`, '');
+      continue;
+    }
+    if (s.kind === 'note') {
+      if (s.description?.trim()) lines.push(`> **Nota:** ${s.description}`, '');
+      continue;
+    }
+    const img = s.annotated ?? s.screenshot;
+    if (!img) continue;
+    actionNo += 1;
+    const name = `step-${actionNo}.${ext}`;
+    imagesDir.file(name, await reencode(img, quality));
+    lines.push(`## Paso ${actionNo}. ${s.caption}`, '');
+    lines.push(`![Paso ${actionNo}](images/${name})`, '');
     if (s.description) lines.push(s.description, '');
   }
 

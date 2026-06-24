@@ -48,14 +48,16 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
   const dragging = useRef(false);
 
   useEffect(() => {
-    const url = URL.createObjectURL(step.annotated ?? step.screenshot);
+    const img = step.annotated ?? step.screenshot;
+    if (!img) return;
+    const url = URL.createObjectURL(img);
     setImgUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [step]);
 
   function onImgLoad() {
-    const natW = imgRef.current?.naturalWidth ?? step.width;
-    const natH = imgRef.current?.naturalHeight ?? step.height;
+    const natW = imgRef.current?.naturalWidth || step.width || 0;
+    const natH = imgRef.current?.naturalHeight || step.height || 0;
     const w = Math.min(MAX_DISPLAY_W, natW);
     const scale = w / natW;
     setDisplay({ w, h: natH * scale, scale });
