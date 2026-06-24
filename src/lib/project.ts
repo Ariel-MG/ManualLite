@@ -26,6 +26,11 @@ interface ProjectFile {
     title: string;
     subtitle?: string;
     accentColor?: string;
+    author?: string;
+    version?: string;
+    company?: string;
+    confidentiality?: string;
+    pageSize?: Manual['pageSize'];
     createdAt: number;
     logo?: string; // dataURL
   };
@@ -46,6 +51,11 @@ export async function exportProject(manual: Manual, steps: Step[]): Promise<void
       title: manual.title,
       subtitle: manual.subtitle,
       accentColor: manual.accentColor,
+      author: manual.author,
+      version: manual.version,
+      company: manual.company,
+      confidentiality: manual.confidentiality,
+      pageSize: manual.pageSize,
       createdAt: manual.createdAt,
       logo: manual.logo ? await blobToDataURL(manual.logo) : undefined,
     },
@@ -80,6 +90,11 @@ export async function importProject(file: File): Promise<string> {
   await updateManual(manual.id, {
     subtitle: parsed.manual.subtitle,
     accentColor: parsed.manual.accentColor,
+    author: parsed.manual.author,
+    version: parsed.manual.version,
+    company: parsed.manual.company,
+    confidentiality: parsed.manual.confidentiality,
+    pageSize: parsed.manual.pageSize,
     logo: parsed.manual.logo ? await dataUrlToBlob(parsed.manual.logo) : undefined,
   });
 

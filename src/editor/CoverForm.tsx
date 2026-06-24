@@ -2,9 +2,20 @@ import { useEffect, useState } from 'react';
 import type { Manual } from '../types';
 import { DEFAULT_ACCENT } from '../types';
 
+type EditableField =
+  | 'title'
+  | 'subtitle'
+  | 'logo'
+  | 'accentColor'
+  | 'author'
+  | 'version'
+  | 'company'
+  | 'confidentiality'
+  | 'pageSize';
+
 interface Props {
   manual: Manual;
-  onChange: (patch: Partial<Pick<Manual, 'title' | 'subtitle' | 'logo' | 'accentColor'>>) => void;
+  onChange: (patch: Partial<Pick<Manual, EditableField>>) => void;
 }
 
 const PRESET_COLORS = ['#dc2626', '#ea580c', '#d97706', '#16a34a', '#0891b2', '#2563eb', '#7c3aed', '#111827'];
@@ -141,6 +152,46 @@ export function CoverForm({ manual, onChange }: Props) {
               Quitar
             </button>
           )}
+        </div>
+      </div>
+
+      <div style={{ flex: '1 1 100%', borderTop: '1px solid #f3f4f6', paddingTop: 16 }}>
+        <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>METADATOS DE PORTADA</span>
+        <div
+          style={{
+            marginTop: 10,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <label style={lbl}>
+            Empresa
+            <input value={manual.company ?? ''} onChange={(e) => onChange({ company: e.target.value })} style={input} placeholder="Ej. Acme S.A." />
+          </label>
+          <label style={lbl}>
+            Autor
+            <input value={manual.author ?? ''} onChange={(e) => onChange({ author: e.target.value })} style={input} placeholder="Tu nombre" />
+          </label>
+          <label style={lbl}>
+            Versión
+            <input value={manual.version ?? ''} onChange={(e) => onChange({ version: e.target.value })} style={input} placeholder="Ej. 1.0" />
+          </label>
+          <label style={lbl}>
+            Confidencialidad
+            <input value={manual.confidentiality ?? ''} onChange={(e) => onChange({ confidentiality: e.target.value })} style={input} placeholder="Ej. Confidencial" />
+          </label>
+          <label style={lbl}>
+            Tamaño de página (PDF)
+            <select
+              value={manual.pageSize ?? 'A4'}
+              onChange={(e) => onChange({ pageSize: e.target.value as Manual['pageSize'] })}
+              style={{ ...input, cursor: 'pointer', background: '#fff' }}
+            >
+              <option value="A4">A4</option>
+              <option value="LETTER">Carta</option>
+            </select>
+          </label>
         </div>
       </div>
     </div>

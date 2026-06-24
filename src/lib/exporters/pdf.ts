@@ -1,7 +1,7 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
-import type { Manual, Step } from '../../types';
+import type { Manual, PageSize, Step } from '../../types';
 import { DEFAULT_ACCENT } from '../../types';
 import { blobToDataURL, safeName } from '../blob';
 import { exportImageDataUrl, type ImageQuality } from '../image';
@@ -14,14 +14,13 @@ const vfs =
   (pdfFonts as unknown as { vfs: Record<string, string> }).vfs;
 (pdfMake as unknown as { vfs: Record<string, string> }).vfs = vfs;
 
-const PAGE_W = 595.28; // A4 en pt
+const PAGE_WIDTHS: Record<PageSize, number> = { A4: 595.28, LETTER: 612 };
 const MARGIN_X = 48;
-const PAGE_CONTENT_WIDTH = PAGE_W - MARGIN_X * 2;
 const MAX_IMG_HEIGHT = 560; // evita que capturas muy altas desborden la página
 
-function imageFit(step: Step): [number, number] {
+function imageFit(step: Step, contentWidth: number): [number, number] {
   const ratio = step.height / step.width;
-  let w = Math.min(PAGE_CONTENT_WIDTH, step.width);
+  let w = Math.min(contentWidth, step.width);
   let h = w * ratio;
   if (h > MAX_IMG_HEIGHT) {
     h = MAX_IMG_HEIGHT;
@@ -40,10 +39,23 @@ export async function exportPdf(
   quality: ImageQuality = 'medium',
 ): Promise<void> {
   const ACCENT = manual.accentColor ?? DEFAULT_ACCENT;
+  const pageSize: PageSize = manual.pageSize ?? 'A4';
+  const pageW = PAGE_WIDTHS[pageSize];
+  const contentWidth = pageW - MARGIN_X * 2;
   const logoDataUrl = manual.logo ? await blobToDataURL(manual.logo) : undefined;
 
   // --- Portada ---
   const cover: Content[] = [];
+  if (manual.company) {
+    cover.push({
+      text: manual.company,
+      color: '#6b7280',
+      fontSize: 12,
+      bold: true,
+      alignment: 'center',
+      margin: [0, 80, 0, 0],
+    });
+  }
   cover.push({
     text: 'MANUAL DE USUARIO',
     color: ACCENT,
@@ -51,7 +63,7 @@ export async function exportPdf(
     fontSize: 11,
     characterSpacing: 3,
     alignment: 'center',
-    margin: [0, logoDataUrl ? 30 : 150, 0, 18],
+    margin: [0, manual.company ? 16 : logoDataUrl ? 30 : 150, 0, 18],
   });
   if (logoDataUrl) {
     cover.push({ image: logoDataUrl, fit: [210, 110], alignment: 'center', margin: [0, 0, 0, 28] });
@@ -62,15 +74,31 @@ export async function exportPdf(
   }
   // Pequeña línea decorativa
   cover.push({
-    canvas: [{ type: 'line', x1: PAGE_CONTENT_WIDTH / 2 - 30, y1: 0, x2: PAGE_CONTENT_WIDTH / 2 + 30, y2: 0, lineWidth: 2, lineColor: ACCENT }],
+    canvas: [{ type: 'line', x1: contentWidth / 2 - 30, y1: 0, x2: contentWidth / 2 + 30, y2: 0, lineWidth: 2, lineColor: ACCENT }],
     margin: [0, 22, 0, 18],
   });
-  cover.push({
-    text: formatDate(manual.createdAt),
-    style: 'coverDate',
-    alignment: 'center',
-    pageBreak: 'after',
-  });
+
+  // Metadatos (autor · versión · fecha)
+  const meta = [
+    manual.author ? `Autor: ${manual.author}` : null,
+    manual.version ? `Versión: ${manual.version}` : null,
+    formatDate(manual.createdAt),
+  ].filter(Boolean) as string[];
+  cover.push({ text: meta.join('   ·   '), style: 'coverDate', alignment: 'center' });
+
+  if (manual.confidentiality) {
+    cover.push({
+      text: manual.confidentiality.toUpperCase(),
+      color: ACCENT,
+      fontSize: 10,
+      bold: true,
+      characterSpacing: 1.5,
+      alignment: 'center',
+      margin: [0, 26, 0, 0],
+    });
+  }
+  // Salto de página al final de la portada.
+  cover.push({ text: '', pageBreak: 'after' });
 
   // --- Índice automático ---
   const toc: Content = {
@@ -83,7 +111,7 @@ export async function exportPdf(
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     const dataUrl = await exportImageDataUrl(step.annotated ?? step.screenshot, quality);
-    const [w, h] = imageFit(step);
+    const [w, h] = imageFit(step, contentWidth);
 
     const heading = {
       text: [
@@ -109,14 +137,14 @@ export async function exportPdf(
 
     if (i < steps.length - 1) {
       stepContent.push({
-        canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_CONTENT_WIDTH, y2: 0, lineWidth: 0.7, lineColor: '#e5e7eb' }],
+        canvas: [{ type: 'line', x1: 0, y1: 0, x2: contentWidth, y2: 0, lineWidth: 0.7, lineColor: '#e5e7eb' }],
         margin: [0, 20, 0, 20],
       });
     }
   }
 
   const doc: TDocumentDefinitions = {
-    pageSize: 'A4',
+    pageSize,
     pageMargins: [MARGIN_X, 64, MARGIN_X, 56],
     content: [...cover, toc, ...stepContent],
     styles: {
@@ -131,7 +159,7 @@ export async function exportPdf(
     // Franja de color en la cabecera de las páginas de contenido (no en portada).
     background: (currentPage) =>
       currentPage === 1
-        ? { canvas: [{ type: 'rect', x: 0, y: 0, w: PAGE_W, h: 6, color: ACCENT }] }
+        ? { canvas: [{ type: 'rect', x: 0, y: 0, w: pageW, h: 6, color: ACCENT }] }
         : '',
     header: (currentPage) =>
       currentPage > 1
@@ -150,7 +178,7 @@ export async function exportPdf(
             stack: [
               {
                 canvas: [
-                  { type: 'line', x1: 0, y1: 0, x2: PAGE_CONTENT_WIDTH, y2: 0, lineWidth: 0.5, lineColor: '#e5e7eb' },
+                  { type: 'line', x1: 0, y1: 0, x2: contentWidth, y2: 0, lineWidth: 0.5, lineColor: '#e5e7eb' },
                 ],
               },
               {

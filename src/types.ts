@@ -30,12 +30,20 @@ export interface Step {
   createdAt: number;
 }
 
+export type PageSize = 'A4' | 'LETTER';
+
 export interface Manual {
   id: string;
   title: string;
   subtitle?: string;
   logo?: Blob; // logo de la portada
   accentColor?: string; // color de marca (hex), p. ej. "#dc2626"
+  // Metadatos de portada (todos opcionales y editables por el usuario)
+  author?: string;
+  version?: string;
+  company?: string;
+  confidentiality?: string; // aviso, p. ej. "Confidencial"
+  pageSize?: PageSize; // tamaño de página del PDF (por defecto A4)
   createdAt: number;
   updatedAt: number;
 }

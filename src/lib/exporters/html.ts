@@ -28,6 +28,12 @@ export async function exportHtml(
     day: 'numeric',
   });
 
+  const meta = [
+    manual.author ? `Autor: ${esc(manual.author)}` : null,
+    manual.version ? `Versión: ${esc(manual.version)}` : null,
+    date,
+  ].filter(Boolean) as string[];
+
   const toc = steps
     .map((s, i) => `<li><a href="#step-${i + 1}">Paso ${i + 1}. ${esc(s.caption)}</a></li>`)
     .join('\n');
@@ -54,6 +60,8 @@ export async function exportHtml(
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui,-apple-system,sans-serif; color:#111827; background:#f9fafb; border-top:6px solid var(--accent); }
   .cover .eyebrow { color:var(--accent); font-weight:700; letter-spacing:.18em; font-size:.8rem; margin:0 0 14px; }
+  .cover .company { color:#6b7280; font-weight:700; font-size:1rem; margin:0 0 10px; }
+  .cover .confidential { color:var(--accent); font-weight:700; letter-spacing:.12em; font-size:.78rem; margin:18px 0 0; }
   .wrap { max-width: 820px; margin: 0 auto; padding: 0 20px 80px; }
   .cover { text-align:center; padding: 80px 20px 50px; }
   .cover img { max-height: 110px; margin-bottom: 24px; }
@@ -74,11 +82,13 @@ export async function exportHtml(
 </head>
 <body>
   <div class="cover">
+    ${manual.company ? `<p class="company">${esc(manual.company)}</p>` : ''}
     <p class="eyebrow">MANUAL DE USUARIO</p>
     ${logo ? `<img src="${logo}" alt="logo" />` : ''}
     <h1>${esc(manual.title)}</h1>
     ${manual.subtitle ? `<p class="sub">${esc(manual.subtitle)}</p>` : ''}
-    <p class="date">${date}</p>
+    <p class="date">${meta.join('&nbsp;&nbsp;·&nbsp;&nbsp;')}</p>
+    ${manual.confidentiality ? `<p class="confidential">${esc(manual.confidentiality.toUpperCase())}</p>` : ''}
   </div>
   <div class="wrap">
     <nav class="toc">

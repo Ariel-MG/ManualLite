@@ -23,13 +23,20 @@ export async function exportMarkdown(
   });
 
   const lines: string[] = [];
+  if (manual.company) lines.push(`**${manual.company}**`, '');
   lines.push(`# ${manual.title}`, '');
   if (manual.subtitle) lines.push(`_${manual.subtitle}_`, '');
   if (manual.logo) {
     imagesDir.file('logo.png', manual.logo);
     lines.push(`![logo](images/logo.png)`, '');
   }
-  lines.push(`> ${date}`, '');
+  const meta = [
+    manual.author ? `Autor: ${manual.author}` : null,
+    manual.version ? `Versión: ${manual.version}` : null,
+    date,
+  ].filter(Boolean) as string[];
+  lines.push(`> ${meta.join(' · ')}`, '');
+  if (manual.confidentiality) lines.push(`> **${manual.confidentiality.toUpperCase()}**`, '');
 
   // Índice
   lines.push('## Índice', '');

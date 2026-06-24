@@ -63,7 +63,22 @@ export function Editor() {
     load();
   }, [load]);
 
-  async function patchManual(patch: Partial<Pick<Manual, 'title' | 'subtitle' | 'logo' | 'accentColor'>>) {
+  async function patchManual(
+    patch: Partial<
+      Pick<
+        Manual,
+        | 'title'
+        | 'subtitle'
+        | 'logo'
+        | 'accentColor'
+        | 'author'
+        | 'version'
+        | 'company'
+        | 'confidentiality'
+        | 'pageSize'
+      >
+    >,
+  ) {
     if (!manual) return;
     setManual({ ...manual, ...patch });
     await updateManual(manual.id, patch);
