@@ -75,6 +75,13 @@ src/
 - La captura se toma en `pointerdown`, es decir el **estado previo** al click (con el marcador sobre el destino). Si un click navega muy rápido, ese paso puede perderse.
 - El texto del paso es heurístico: revísalo/edítalo en el editor.
 
+## Revisar manuales con IA (MCP)
+
+Hay un servidor MCP en [`mcp-server/`](mcp-server/) que conecta con **Claude Desktop** para
+revisar manuales exportados (`.manuallite.json`): pasos, escritura y ortografía, y revisión de
+imágenes para sugerir captions. Puede escribir un archivo corregido reimportable. Ver
+[`mcp-server/README.md`](mcp-server/README.md).
+
 ## Ideas para v2
 
 - Mejorar los textos de pasos con IA.
