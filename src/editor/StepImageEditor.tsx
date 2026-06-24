@@ -20,9 +20,31 @@ interface Props {
   onApply: (patch: ImagePatch) => void;
 }
 
-type Tool = 'crop' | 'blur' | 'focus';
+type Tool = 'crop' | 'blur' | 'focus' | 'annotate';
+type AnnoTool = 'arrow' | 'rect' | 'text';
+
+type Anno =
+  | { type: 'arrow'; x1: number; y1: number; x2: number; y2: number; color: string }
+  | { type: 'rect'; x: number; y: number; w: number; h: number; color: string }
+  | { type: 'text'; x: number; y: number; text: string; color: string };
 
 const MAX_DISPLAY_W = 820;
+
+/** Dibuja una flecha de (x1,y1) a (x2,y2) con punta. */
+function drawArrow(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, lw: number): void {
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const head = Math.max(12, lw * 3.5);
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - head * Math.cos(angle - Math.PI / 6), y2 - head * Math.sin(angle - Math.PI / 6));
+  ctx.lineTo(x2 - head * Math.cos(angle + Math.PI / 6), y2 - head * Math.sin(angle + Math.PI / 6));
+  ctx.closePath();
+  ctx.fill();
+}
 
 /** Normaliza un rect con anchos/altos posiblemente negativos. */
 function norm(r: Rect): Rect {
@@ -48,6 +70,9 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
   const [focus, setFocus] = useState<{ x: number; y: number } | null>(null);
   const [focusRadius, setFocusRadius] = useState(24); // % de la dimensión menor
   const [zoom, setZoom] = useState(2);
+  const [annoTool, setAnnoTool] = useState<AnnoTool>('arrow');
+  const [annoColor, setAnnoColor] = useState('#dc2626');
+  const [annotations, setAnnotations] = useState<Anno[]>([]);
   const dragging = useRef(false);
 
   useEffect(() => {
@@ -83,9 +108,18 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
   function onDown(e: React.PointerEvent) {
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = pointer(e);
+    if (tool === 'focus') {
+      dragging.current = true;
+      setFocus(p);
+      return;
+    }
+    if (tool === 'annotate' && annoTool === 'text') {
+      const text = window.prompt('Texto de la anotación:');
+      if (text?.trim()) setAnnotations((prev) => [...prev, { type: 'text', x: p.x, y: p.y, text: text.trim(), color: annoColor }]);
+      return;
+    }
     dragging.current = true;
-    if (tool === 'focus') setFocus(p);
-    else setTemp({ x: p.x, y: p.y, w: 0, h: 0 });
+    setTemp({ x: p.x, y: p.y, w: 0, h: 0 });
   }
 
   function onMove(e: React.PointerEvent) {
@@ -98,12 +132,26 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
   function onUp() {
     dragging.current = false;
     if (tool === 'focus') return;
-    if (temp) {
-      const r = norm(temp);
-      if (r.w >= 5 && r.h >= 5) {
-        if (tool === 'crop') setCrop(r);
-        else setRedactions((prev) => [...prev, r]);
+    if (!temp) return;
+
+    if (tool === 'annotate') {
+      const dist = Math.hypot(temp.w, temp.h);
+      if (dist >= 8) {
+        if (annoTool === 'arrow') {
+          setAnnotations((prev) => [...prev, { type: 'arrow', x1: temp.x, y1: temp.y, x2: temp.x + temp.w, y2: temp.y + temp.h, color: annoColor }]);
+        } else if (annoTool === 'rect') {
+          const r = norm(temp);
+          setAnnotations((prev) => [...prev, { type: 'rect', ...r, color: annoColor }]);
+        }
       }
+      setTemp(null);
+      return;
+    }
+
+    const r = norm(temp);
+    if (r.w >= 5 && r.h >= 5) {
+      if (tool === 'crop') setCrop(r);
+      else setRedactions((prev) => [...prev, r]);
     }
     setTemp(null);
   }
@@ -206,6 +254,43 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
     onApply({ annotated: await canvasToBlob(canvas), width: canvas.width, height: canvas.height });
   }
 
+  async function applyAnnotations() {
+    if (!annotations.length) return;
+    const img = imgRef.current!;
+    const natW = img.naturalWidth;
+    const natH = img.naturalHeight;
+    const s = 1 / display.scale;
+    const lw = Math.max(3, Math.min(natW, natH) * 0.005);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = natW;
+    canvas.height = natH;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+
+    for (const a of annotations) {
+      ctx.strokeStyle = a.color;
+      ctx.fillStyle = a.color;
+      ctx.lineWidth = lw;
+      ctx.lineJoin = 'round';
+      if (a.type === 'rect') {
+        ctx.strokeRect(a.x * s, a.y * s, a.w * s, a.h * s);
+      } else if (a.type === 'arrow') {
+        drawArrow(ctx, a.x1 * s, a.y1 * s, a.x2 * s, a.y2 * s, lw);
+      } else {
+        const fontSize = Math.max(16, Math.min(natW, natH) * 0.03);
+        ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+        ctx.textBaseline = 'top';
+        ctx.lineWidth = fontSize * 0.18;
+        ctx.strokeStyle = '#ffffff';
+        ctx.strokeText(a.text, a.x * s, a.y * s);
+        ctx.fillStyle = a.color;
+        ctx.fillText(a.text, a.x * s, a.y * s);
+      }
+    }
+    onApply({ annotated: await canvasToBlob(canvas), width: natW, height: natH });
+  }
+
   const tempN = temp ? norm(temp) : null;
   const canApply = tool === 'crop' ? !!crop : redactions.length > 0;
   const spotRadiusDisplay = (Math.min(display.w, display.h) * focusRadius) / 100;
@@ -225,7 +310,26 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
             <button onClick={() => setTool('focus')} style={tab(tool === 'focus')}>
               ◎ Foco
             </button>
+            <button onClick={() => setTool('annotate')} style={tab(tool === 'annotate')}>
+              ✎ Anotar
+            </button>
           </div>
+          {tool === 'annotate' && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 3 }}>
+                <button onClick={() => setAnnoTool('arrow')} style={tab(annoTool === 'arrow')}>↗ Flecha</button>
+                <button onClick={() => setAnnoTool('rect')} style={tab(annoTool === 'rect')}>▭ Recuadro</button>
+                <button onClick={() => setAnnoTool('text')} style={tab(annoTool === 'text')}>T Texto</button>
+              </div>
+              <input
+                type="color"
+                value={annoColor}
+                onChange={(e) => setAnnoColor(e.target.value)}
+                title="Color de la anotación"
+                style={{ width: 30, height: 28, padding: 0, border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer', background: '#fff' }}
+              />
+            </div>
+          )}
           {tool === 'blur' && (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: '#374151' }}>
               <label style={{ display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
@@ -259,7 +363,11 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
             ? 'Arrastra para seleccionar el área a conservar.'
             : tool === 'blur'
               ? 'Arrastra sobre cada zona sensible para ocultarla. Puedes marcar varias.'
-              : 'Haz click para situar el punto de foco; ajusta radio/zoom y aplica.'}
+              : tool === 'focus'
+                ? 'Haz click para situar el punto de foco; ajusta radio/zoom y aplica.'
+                : annoTool === 'text'
+                  ? 'Haz click donde quieras colocar el texto.'
+                  : 'Arrastra para dibujar la flecha o el recuadro. Puedes añadir varias.'}
         </p>
 
         <div style={{ display: 'grid', placeItems: 'center', background: '#f3f4f6', borderRadius: 8, padding: 12, overflow: 'auto' }}>
@@ -331,8 +439,44 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
               />
             )}
 
+            {/* Previsualización de anotaciones */}
+            {tool === 'annotate' && (
+              <svg
+                width={display.w}
+                height={display.h}
+                style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none', overflow: 'visible' }}
+              >
+                <defs>
+                  {annotations.concat(temp && annoTool === 'arrow' ? [{ type: 'arrow', x1: temp.x, y1: temp.y, x2: temp.x + temp.w, y2: temp.y + temp.h, color: annoColor }] : []).map((a, i) =>
+                    a.type === 'arrow' ? (
+                      <marker key={i} id={`ah-${i}`} markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+                        <path d="M0,0 L7,3 L0,6 Z" fill={a.color} />
+                      </marker>
+                    ) : null,
+                  )}
+                </defs>
+                {annotations.map((a, i) => {
+                  if (a.type === 'arrow')
+                    return <line key={i} x1={a.x1} y1={a.y1} x2={a.x2} y2={a.y2} stroke={a.color} strokeWidth={3} markerEnd={`url(#ah-${i})`} />;
+                  if (a.type === 'rect')
+                    return <rect key={i} x={a.x} y={a.y} width={a.w} height={a.h} fill="none" stroke={a.color} strokeWidth={3} />;
+                  return (
+                    <text key={i} x={a.x} y={a.y + 14} fill={a.color} stroke="#fff" strokeWidth={3} paintOrder="stroke" fontSize={16} fontWeight={700}>
+                      {a.text}
+                    </text>
+                  );
+                })}
+                {temp && annoTool === 'arrow' && (
+                  <line x1={temp.x} y1={temp.y} x2={temp.x + temp.w} y2={temp.y + temp.h} stroke={annoColor} strokeWidth={3} markerEnd={`url(#ah-${annotations.length})`} />
+                )}
+                {temp && annoTool === 'rect' && tempN && (
+                  <rect x={tempN.x} y={tempN.y} width={tempN.w} height={tempN.h} fill="none" stroke={annoColor} strokeWidth={3} strokeDasharray="4 3" />
+                )}
+              </svg>
+            )}
+
             {/* Rectángulo en curso de arrastre */}
-            {tool !== 'focus' && tempN && tempN.w > 0 && tempN.h > 0 && (
+            {tool !== 'focus' && tool !== 'annotate' && tempN && tempN.w > 0 && tempN.h > 0 && (
               <div
                 style={{
                   position: 'absolute',
@@ -366,11 +510,29 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
               Limpiar selección
             </button>
           )}
+          {tool === 'annotate' && annotations.length > 0 && (
+            <>
+              <button onClick={() => setAnnotations((p) => p.slice(0, -1))} style={btn('#f3f4f6', '#374151')}>
+                Deshacer última
+              </button>
+              <button onClick={() => setAnnotations([])} style={btn('#f3f4f6', '#374151')}>
+                Limpiar ({annotations.length})
+              </button>
+            </>
+          )}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
             <button onClick={onClose} style={btn('#f3f4f6', '#374151')}>
               Cancelar
             </button>
-            {tool === 'focus' ? (
+            {tool === 'annotate' ? (
+              <button
+                onClick={applyAnnotations}
+                disabled={annotations.length === 0}
+                style={{ ...btn('#dc2626', '#fff'), opacity: annotations.length ? 1 : 0.5 }}
+              >
+                Aplicar y guardar
+              </button>
+            ) : tool === 'focus' ? (
               <>
                 <button onClick={applyZoom} style={btn('#111827', '#fff')}>
                   Acercar al punto
