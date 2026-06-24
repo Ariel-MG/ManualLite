@@ -67,7 +67,9 @@ export interface ClickCapture {
 export type RuntimeMessage =
   | { type: 'START_RECORDING'; manualId: string; tabId?: number }
   | { type: 'STOP_RECORDING' }
+  | { type: 'TOGGLE_PAUSE' }
+  | { type: 'DELETE_LAST_STEP' }
   | { type: 'GET_STATE' }
-  | { type: 'STATE'; recording: boolean; manualId: string | null; stepCount: number }
+  | { type: 'STATE'; recording: boolean; paused: boolean; manualId: string | null; stepCount: number }
   | { type: 'CLICK_CAPTURED'; capture: ClickCapture }
-  | { type: 'RECORDING_CHANGED'; recording: boolean; manualId: string | null };
+  | { type: 'RECORDING_CHANGED'; recording: boolean; paused: boolean; manualId: string | null; stepCount: number };

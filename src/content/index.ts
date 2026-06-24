@@ -1,6 +1,6 @@
 import type { ClickCapture, ClickedElement, RuntimeMessage } from '../types';
 import { extractElementText } from '../lib/caption';
-import { hideBadge, setCount, showBadge, withBadgeHidden } from './recorder';
+import { BADGE_ID, hideBadge, renderBadge, setCount, withBadgeHidden } from './recorder';
 
 // Evita doble registro si el script se inyecta dos veces (manifest + on-demand).
 declare global {
@@ -10,9 +10,20 @@ declare global {
 }
 
 let recording = false;
+let paused = false;
 let localCount = 0;
 
 const INTERACTIVE = 'a, button, input, textarea, select, label, [role], [onclick]';
+
+const handlers = {
+  onTogglePause: () => sendBg({ type: 'TOGGLE_PAUSE' }),
+  onDeleteLast: () => sendBg({ type: 'DELETE_LAST_STEP' }),
+  onStop: () => sendBg({ type: 'STOP_RECORDING' }),
+};
+
+function sendBg(msg: RuntimeMessage): void {
+  chrome.runtime.sendMessage(msg).catch(() => {});
+}
 
 /** Sube por el árbol hasta un elemento "interactivo" representativo. */
 function resolveTarget(target: EventTarget | null): Element | null {
@@ -29,9 +40,11 @@ function describeElement(el: Element): ClickedElement {
 }
 
 function onPointerDown(event: PointerEvent): void {
-  if (!recording) return;
+  if (!recording || paused) return;
   const el = resolveTarget(event.target);
   if (!el) return;
+  // No capturar clicks sobre el propio badge de control.
+  if (el.closest(`#${BADGE_ID}`)) return;
 
   // Ocultar el badge para que no aparezca en la captura.
   withBadgeHidden(true);
@@ -45,19 +58,17 @@ function onPointerDown(event: PointerEvent): void {
   };
 
   // Pequeño respiro para que el repaint oculte el badge antes de capturar.
-  requestAnimationFrame(() => {
-    const msg: RuntimeMessage = { type: 'CLICK_CAPTURED', capture };
-    chrome.runtime.sendMessage(msg).catch(() => {});
-  });
+  requestAnimationFrame(() => sendBg({ type: 'CLICK_CAPTURED', capture }));
 
   localCount += 1;
   setCount(localCount);
 }
 
-function applyState(isRecording: boolean, stepCount: number): void {
+function applyState(isRecording: boolean, isPaused: boolean, stepCount: number): void {
   recording = isRecording;
+  paused = isPaused;
   localCount = stepCount;
-  if (isRecording) showBadge(stepCount);
+  if (isRecording) renderBadge({ paused: isPaused, count: stepCount }, handlers);
   else hideBadge();
 }
 
@@ -68,14 +79,14 @@ function init(): void {
   // Estado inicial al cargar el content script.
   chrome.runtime
     .sendMessage({ type: 'GET_STATE' } satisfies RuntimeMessage)
-    .then((res: { recording: boolean; stepCount: number } | undefined) => {
-      if (res) applyState(res.recording, res.stepCount ?? 0);
+    .then((res: { recording: boolean; paused: boolean; stepCount: number } | undefined) => {
+      if (res) applyState(res.recording, res.paused ?? false, res.stepCount ?? 0);
     })
     .catch(() => {});
 
   chrome.runtime.onMessage.addListener((message: RuntimeMessage) => {
     if (message.type === 'RECORDING_CHANGED') {
-      applyState(message.recording, 0);
+      applyState(message.recording, message.paused, message.stepCount);
     }
   });
 

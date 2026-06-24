@@ -33,4 +33,10 @@ export default defineManifest({
   ],
   permissions: ['activeTab', 'tabs', 'scripting', 'storage', 'downloads'],
   host_permissions: ['<all_urls>'],
+  commands: {
+    'toggle-recording': {
+      suggested_key: { default: 'Ctrl+Shift+S', mac: 'Command+Shift+S' },
+      description: 'Iniciar/detener grabación de ManualLite',
+    },
+  },
 });
