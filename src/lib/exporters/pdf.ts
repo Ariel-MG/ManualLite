@@ -4,6 +4,7 @@ import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 import type { Manual, Step } from '../../types';
 import { DEFAULT_ACCENT } from '../../types';
 import { blobToDataURL, safeName } from '../blob';
+import { exportImageDataUrl, type ImageQuality } from '../image';
 
 // pdfmake necesita su sistema de fuentes virtual (vfs). El shape ha cambiado
 // entre versiones, por eso resolvemos de forma defensiva.
@@ -33,7 +34,11 @@ function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString('es', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-export async function exportPdf(manual: Manual, steps: Step[]): Promise<void> {
+export async function exportPdf(
+  manual: Manual,
+  steps: Step[],
+  quality: ImageQuality = 'medium',
+): Promise<void> {
   const ACCENT = manual.accentColor ?? DEFAULT_ACCENT;
   const logoDataUrl = manual.logo ? await blobToDataURL(manual.logo) : undefined;
 
@@ -77,7 +82,7 @@ export async function exportPdf(manual: Manual, steps: Step[]): Promise<void> {
   const stepContent: Content[] = [];
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
-    const dataUrl = await blobToDataURL(step.annotated ?? step.screenshot);
+    const dataUrl = await exportImageDataUrl(step.annotated ?? step.screenshot, quality);
     const [w, h] = imageFit(step);
 
     const heading = {

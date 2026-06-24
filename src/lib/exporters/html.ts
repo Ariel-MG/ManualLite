@@ -1,6 +1,7 @@
 import type { Manual, Step } from '../../types';
 import { DEFAULT_ACCENT } from '../../types';
 import { blobToDataURL, downloadBlob, safeName } from '../blob';
+import { exportImageDataUrl, type ImageQuality } from '../image';
 
 function esc(s: string): string {
   return s
@@ -11,10 +12,14 @@ function esc(s: string): string {
 }
 
 /** Genera un único archivo .html autocontenido (CSS + imágenes en base64). */
-export async function exportHtml(manual: Manual, steps: Step[]): Promise<void> {
+export async function exportHtml(
+  manual: Manual,
+  steps: Step[],
+  quality: ImageQuality = 'medium',
+): Promise<void> {
   const logo = manual.logo ? await blobToDataURL(manual.logo) : '';
   const images = await Promise.all(
-    steps.map((s) => blobToDataURL(s.annotated ?? s.screenshot)),
+    steps.map((s) => exportImageDataUrl(s.annotated ?? s.screenshot, quality)),
   );
 
   const date = new Date(manual.createdAt).toLocaleDateString('es', {

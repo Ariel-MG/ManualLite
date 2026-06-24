@@ -1,14 +1,20 @@
 import JSZip from 'jszip';
 import type { Manual, Step } from '../../types';
 import { downloadBlob, safeName } from '../blob';
+import { imageExt, reencode, type ImageQuality } from '../image';
 
 /**
  * Genera un .md con las imágenes referenciadas en una carpeta `images/`,
  * todo empaquetado en un .zip.
  */
-export async function exportMarkdown(manual: Manual, steps: Step[]): Promise<void> {
+export async function exportMarkdown(
+  manual: Manual,
+  steps: Step[],
+  quality: ImageQuality = 'medium',
+): Promise<void> {
   const zip = new JSZip();
   const imagesDir = zip.folder('images')!;
+  const ext = imageExt(quality);
 
   const date = new Date(manual.createdAt).toLocaleDateString('es', {
     year: 'numeric',
@@ -36,10 +42,10 @@ export async function exportMarkdown(manual: Manual, steps: Step[]): Promise<voi
   // Pasos
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
-    const file = `images/step-${i + 1}.png`;
-    imagesDir.file(`step-${i + 1}.png`, s.annotated ?? s.screenshot);
+    const name = `step-${i + 1}.${ext}`;
+    imagesDir.file(name, await reencode(s.annotated ?? s.screenshot, quality));
     lines.push(`## Paso ${i + 1}. ${s.caption}`, '');
-    lines.push(`![Paso ${i + 1}](${file})`, '');
+    lines.push(`![Paso ${i + 1}](images/${name})`, '');
     if (s.description) lines.push(s.description, '');
   }
 
