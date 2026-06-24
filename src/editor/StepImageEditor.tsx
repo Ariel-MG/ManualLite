@@ -20,7 +20,7 @@ interface Props {
   onApply: (patch: ImagePatch) => void;
 }
 
-type Tool = 'crop' | 'blur';
+type Tool = 'crop' | 'blur' | 'focus';
 
 const MAX_DISPLAY_W = 820;
 
@@ -45,6 +45,9 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
   const [redactions, setRedactions] = useState<Rect[]>([]);
   const [redactStyle, setRedactStyle] = useState<'blur' | 'solid'>('blur');
   const [temp, setTemp] = useState<Rect | null>(null);
+  const [focus, setFocus] = useState<{ x: number; y: number } | null>(null);
+  const [focusRadius, setFocusRadius] = useState(24); // % de la dimensión menor
+  const [zoom, setZoom] = useState(2);
   const dragging = useRef(false);
 
   useEffect(() => {
@@ -61,6 +64,12 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
     const w = Math.min(MAX_DISPLAY_W, natW);
     const scale = w / natW;
     setDisplay({ w, h: natH * scale, scale });
+    // Centro de foco por defecto: el punto del click registrado.
+    if (step.clickOnImage) {
+      setFocus({ x: step.clickOnImage.x * scale, y: step.clickOnImage.y * scale });
+    } else {
+      setFocus({ x: w / 2, y: (natH * scale) / 2 });
+    }
   }
 
   function pointer(e: React.PointerEvent): { x: number; y: number } {
@@ -75,17 +84,20 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = pointer(e);
     dragging.current = true;
-    setTemp({ x: p.x, y: p.y, w: 0, h: 0 });
+    if (tool === 'focus') setFocus(p);
+    else setTemp({ x: p.x, y: p.y, w: 0, h: 0 });
   }
 
   function onMove(e: React.PointerEvent) {
-    if (!dragging.current || !temp) return;
+    if (!dragging.current) return;
     const p = pointer(e);
-    setTemp({ ...temp, w: p.x - temp.x, h: p.y - temp.y });
+    if (tool === 'focus') setFocus(p);
+    else if (temp) setTemp({ ...temp, w: p.x - temp.x, h: p.y - temp.y });
   }
 
   function onUp() {
     dragging.current = false;
+    if (tool === 'focus') return;
     if (temp) {
       const r = norm(temp);
       if (r.w >= 5 && r.h >= 5) {
@@ -147,8 +159,56 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
     onApply({ annotated: await canvasToBlob(canvas), width: natW, height: natH });
   }
 
+  /** Centro de foco en coordenadas naturales. */
+  function focusNatural(): { x: number; y: number } {
+    const s = 1 / display.scale;
+    const f = focus ?? { x: display.w / 2, y: display.h / 2 };
+    return { x: f.x * s, y: f.y * s };
+  }
+
+  async function applySpotlight() {
+    const img = imgRef.current!;
+    const natW = img.naturalWidth;
+    const natH = img.naturalHeight;
+    const { x, y } = focusNatural();
+    const r = (Math.min(natW, natH) * focusRadius) / 100;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = natW;
+    canvas.height = natH;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+
+    const grd = ctx.createRadialGradient(x, y, r * 0.6, x, y, r * 1.6);
+    grd.addColorStop(0, 'rgba(0,0,0,0)');
+    grd.addColorStop(1, 'rgba(0,0,0,0.62)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, natW, natH);
+
+    onApply({ annotated: await canvasToBlob(canvas), width: natW, height: natH });
+  }
+
+  async function applyZoom() {
+    const img = imgRef.current!;
+    const natW = img.naturalWidth;
+    const natH = img.naturalHeight;
+    const { x, y } = focusNatural();
+    const cw = natW / zoom;
+    const ch = natH / zoom;
+    const sx = Math.max(0, Math.min(natW - cw, x - cw / 2));
+    const sy = Math.max(0, Math.min(natH - ch, y - ch / 2));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(cw);
+    canvas.height = Math.round(ch);
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, sx, sy, cw, ch, 0, 0, cw, ch);
+    onApply({ annotated: await canvasToBlob(canvas), width: canvas.width, height: canvas.height });
+  }
+
   const tempN = temp ? norm(temp) : null;
   const canApply = tool === 'crop' ? !!crop : redactions.length > 0;
+  const spotRadiusDisplay = (Math.min(display.w, display.h) * focusRadius) / 100;
 
   return (
     <div style={overlay} onClick={onClose}>
@@ -162,6 +222,9 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
             <button onClick={() => setTool('blur')} style={tab(tool === 'blur')}>
               ◧ Difuminar
             </button>
+            <button onClick={() => setTool('focus')} style={tab(tool === 'focus')}>
+              ◎ Foco
+            </button>
           </div>
           {tool === 'blur' && (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: '#374151' }}>
@@ -173,6 +236,19 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
               </label>
             </div>
           )}
+          {tool === 'focus' && (
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', fontSize: 12, color: '#374151' }}>
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                Radio
+                <input type="range" min={8} max={45} value={focusRadius} onChange={(e) => setFocusRadius(+e.target.value)} />
+              </label>
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                Zoom
+                <input type="range" min={120} max={400} value={zoom * 100} onChange={(e) => setZoom(+e.target.value / 100)} />
+                {zoom.toFixed(1)}×
+              </label>
+            </div>
+          )}
           <button onClick={onClose} style={{ marginLeft: 'auto', ...iconBtn }}>
             ✕
           </button>
@@ -181,7 +257,9 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
         <p style={{ margin: '0 0 10px', fontSize: 12, color: '#6b7280' }}>
           {tool === 'crop'
             ? 'Arrastra para seleccionar el área a conservar.'
-            : 'Arrastra sobre cada zona sensible para ocultarla. Puedes marcar varias.'}
+            : tool === 'blur'
+              ? 'Arrastra sobre cada zona sensible para ocultarla. Puedes marcar varias.'
+              : 'Haz click para situar el punto de foco; ajusta radio/zoom y aplica.'}
         </p>
 
         <div style={{ display: 'grid', placeItems: 'center', background: '#f3f4f6', borderRadius: 8, padding: 12, overflow: 'auto' }}>
@@ -236,8 +314,25 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
               />
             )}
 
+            {/* Vista previa del foco */}
+            {tool === 'focus' && focus && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: focus.x - spotRadiusDisplay,
+                  top: focus.y - spotRadiusDisplay,
+                  width: spotRadiusDisplay * 2,
+                  height: spotRadiusDisplay * 2,
+                  borderRadius: '50%',
+                  border: '2px solid #dc2626',
+                  boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)',
+                  pointerEvents: 'none',
+                }}
+              />
+            )}
+
             {/* Rectángulo en curso de arrastre */}
-            {tempN && tempN.w > 0 && tempN.h > 0 && (
+            {tool !== 'focus' && tempN && tempN.w > 0 && tempN.h > 0 && (
               <div
                 style={{
                   position: 'absolute',
@@ -275,13 +370,24 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
             <button onClick={onClose} style={btn('#f3f4f6', '#374151')}>
               Cancelar
             </button>
-            <button
-              onClick={() => (tool === 'crop' ? applyCrop() : applyRedactions())}
-              disabled={!canApply}
-              style={{ ...btn('#dc2626', '#fff'), opacity: canApply ? 1 : 0.5 }}
-            >
-              {tool === 'crop' ? 'Aplicar recorte' : 'Aplicar y guardar'}
-            </button>
+            {tool === 'focus' ? (
+              <>
+                <button onClick={applyZoom} style={btn('#111827', '#fff')}>
+                  Acercar al punto
+                </button>
+                <button onClick={applySpotlight} style={btn('#dc2626', '#fff')}>
+                  Aplicar resaltado
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => (tool === 'crop' ? applyCrop() : applyRedactions())}
+                disabled={!canApply}
+                style={{ ...btn('#dc2626', '#fff'), opacity: canApply ? 1 : 0.5 }}
+              >
+                {tool === 'crop' ? 'Aplicar recorte' : 'Aplicar y guardar'}
+              </button>
+            )}
           </div>
         </div>
       </div>
