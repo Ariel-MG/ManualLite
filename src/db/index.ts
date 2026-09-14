@@ -109,18 +109,52 @@ export async function duplicateManual(id: string): Promise<Manual | undefined> {
 
 // --- Steps ---
 
+/** Añade un paso al final del manual. Es el camino de la grabación. */
 export async function addStep(
   step: Omit<Step, 'id' | 'order' | 'createdAt'>,
 ): Promise<Step> {
   const db = await getDB();
-  const count = await db.getAllFromIndex('steps', 'by-manual', step.manualId);
+  // countFromIndex no deserializa los registros: contar así evita leer todos
+  // los blobs del manual en cada click grabado.
   const full: Step = {
     ...step,
     id: uid(),
-    order: count.length,
+    order: await countSteps(step.manualId),
     createdAt: Date.now(),
   };
   await db.put('steps', full);
+  await touchManual(step.manualId);
+  return full;
+}
+
+/**
+ * Inserta un paso en la posición `index`, desplazando una posición los que ya
+ * estaban ahí o después.
+ */
+export async function insertStep(
+  step: Omit<Step, 'id' | 'order' | 'createdAt'>,
+  index: number,
+): Promise<Step> {
+  const db = await getDB();
+  const full: Step = {
+    ...step,
+    id: uid(),
+    order: index,
+    createdAt: Date.now(),
+  };
+  const tx = db.transaction('steps', 'readwrite');
+  await tx.store.put(full);
+  // Recorremos con cursor en vez de getAll para no tener todos los blobs del
+  // manual en memoria a la vez.
+  let cursor = await tx.store.index('by-manual').openCursor(step.manualId);
+  while (cursor) {
+    const s = cursor.value;
+    if (s.id !== full.id && s.order >= index) {
+      await cursor.update({ ...s, order: s.order + 1 });
+    }
+    cursor = await cursor.continue();
+  }
+  await tx.done;
   await touchManual(step.manualId);
   return full;
 }
@@ -133,36 +167,42 @@ export async function getSteps(manualId: string): Promise<Step[]> {
   return steps.sort((a, b) => a.order - b.order);
 }
 
-/** Añade un paso de solo texto (sección, nota o regla) al final del manual. */
+/**
+ * Añade un paso de solo texto (sección, nota o regla). Sin `index` va al final;
+ * con `index` se inserta en esa posición.
+ */
 export async function addTextStep(
   manualId: string,
   kind: 'section' | 'note' | 'rule',
+  index?: number,
 ): Promise<Step> {
   const placeholder: Record<typeof kind, string | undefined> = {
     section: undefined,
     note: 'Escribe aquí tu nota…',
     rule: 'Describe la regla o el comportamiento condicional…',
   };
-  return addStep({
+  const step = {
     manualId,
     kind,
     caption: kind === 'section' ? 'Nueva sección' : '',
     description: placeholder[kind],
-  });
+  };
+  return index === undefined ? addStep(step) : insertStep(step, index);
 }
 
 /** Añade un paso de acción a partir de una imagen subida por el usuario.
  * La imagen se normaliza a PNG (sin pérdida), igual que las capturas grabadas. */
-export async function addImageStep(manualId: string, file: Blob): Promise<Step> {
+export async function addImageStep(manualId: string, file: Blob, index?: number): Promise<Step> {
   const { blob, width, height } = await fileToPngImage(file);
-  return addStep({
+  const step = {
     manualId,
-    kind: 'action',
+    kind: 'action' as const,
     screenshot: blob,
     width,
     height,
     caption: 'Nuevo paso',
-  });
+  };
+  return index === undefined ? addStep(step) : insertStep(step, index);
 }
 
 export async function countSteps(manualId: string): Promise<number> {
