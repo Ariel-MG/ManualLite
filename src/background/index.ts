@@ -1,44 +1,18 @@
-import type { ClickCapture, RuntimeMessage } from '../types';
-import { addStep, countSteps, createManual, deleteStep, getSteps } from '../db';
-import { annotateScreenshot } from '../lib/annotate';
-import { buildCaption } from '../lib/caption';
-
-interface RecState {
-  recording: boolean;
-  paused: boolean;
-  manualId: string | null;
-}
-
-const DEFAULT_STATE: RecState = { recording: false, paused: false, manualId: null };
-
-async function getState(): Promise<RecState> {
-  const { rec } = await chrome.storage.session.get('rec');
-  return (rec as RecState) ?? DEFAULT_STATE;
-}
-
-async function setState(state: RecState): Promise<void> {
-  await chrome.storage.session.set({ rec: state });
-}
-
-/** Avisa a todas las pestañas que cambió el estado de grabación. */
-async function broadcastRecording(state: RecState): Promise<void> {
-  const stepCount = state.manualId ? await countSteps(state.manualId) : 0;
-  const msg: RuntimeMessage = {
-    type: 'RECORDING_CHANGED',
-    recording: state.recording,
-    paused: state.paused,
-    manualId: state.manualId,
-    stepCount,
-  };
-  const tabs = await chrome.tabs.query({});
-  for (const tab of tabs) {
-    if (tab.id != null) {
-      chrome.tabs.sendMessage(tab.id, msg).catch(() => {
-        /* pestañas sin content script (chrome://, store, etc.) */
-      });
-    }
-  }
-}
+import type { RuntimeMessage } from '../types';
+import { countSteps, createManual } from '../db';
+import {
+  startRecordingState,
+  stopRecordingState,
+  togglePauseState,
+} from '../recording/state';
+import { listenToggleRecording } from './commands';
+import {
+  broadcastRecording,
+  deleteLastStep,
+  getState,
+  handleClick,
+  setState,
+} from './session';
 
 /**
  * Inyecta el content script en una pestaña si aún no está presente.
@@ -56,74 +30,23 @@ async function ensureContentScript(tabId: number): Promise<void> {
 }
 
 async function startRecording(manualId: string, tabId?: number): Promise<void> {
-  await setState({ recording: true, paused: false, manualId });
+  await setState(startRecordingState(manualId));
   if (tabId != null) await ensureContentScript(tabId);
   await broadcastRecording(await getState());
 }
 
 async function stopRecording(): Promise<void> {
-  await setState(DEFAULT_STATE);
-  await broadcastRecording(DEFAULT_STATE);
+  const idle = stopRecordingState();
+  await setState(idle);
+  await broadcastRecording(idle);
 }
 
 async function togglePause(): Promise<void> {
   const state = await getState();
-  if (!state.recording) return;
-  const next = { ...state, paused: !state.paused };
+  const next = togglePauseState(state);
+  if (next === state) return;
   await setState(next);
   await broadcastRecording(next);
-}
-
-async function deleteLastStep(): Promise<void> {
-  const state = await getState();
-  if (!state.manualId) return;
-  const steps = await getSteps(state.manualId);
-  const last = steps[steps.length - 1];
-  if (last) await deleteStep(last.id);
-  await broadcastRecording(await getState());
-}
-
-async function handleClick(capture: ClickCapture, windowId: number | undefined): Promise<void> {
-  const state = await getState();
-  if (!state.recording || state.paused || !state.manualId) return;
-
-  let dataUrl: string;
-  try {
-    dataUrl = await chrome.tabs.captureVisibleTab(windowId ?? chrome.windows.WINDOW_ID_CURRENT, {
-      format: 'png',
-    });
-  } catch (err) {
-    // Páginas no capturables (chrome://, web store, PDFs internos, etc.)
-    console.warn('[ManualLite] No se pudo capturar la pestaña:', err);
-    return;
-  }
-
-  const screenshot = await (await fetch(dataUrl)).blob();
-
-  // El click viene en px CSS; la captura está en px de dispositivo.
-  const clickOnImage = {
-    x: capture.click.x * capture.dpr,
-    y: capture.click.y * capture.dpr,
-  };
-
-  const { blob: annotated, width, height } = await annotateScreenshot(screenshot, clickOnImage);
-
-  await addStep({
-    manualId: state.manualId,
-    kind: 'action',
-    screenshot,
-    annotated,
-    width,
-    height,
-    click: capture.click,
-    clickOnImage,
-    element: capture.element,
-    caption: buildCaption(capture.element),
-    url: capture.url,
-  });
-
-  // Refresca el contador del badge en la pestaña.
-  await broadcastRecording(await getState());
 }
 
 chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendResponse) => {
@@ -166,17 +89,12 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
   return true; // respuesta asíncrona
 });
 
-// Atajo de teclado: alterna iniciar/detener grabación.
-chrome.commands?.onCommand.addListener((command) => {
-  if (command !== 'toggle-recording') return;
-  (async () => {
-    const state = await getState();
-    if (state.recording) {
-      await stopRecording();
-      return;
-    }
+listenToggleRecording(chrome.commands, {
+  getState,
+  stopRecording,
+  startFromShortcut: async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const manual = await createManual('Manual sin título');
     await startRecording(manual.id, tab?.id);
-  })();
+  },
 });

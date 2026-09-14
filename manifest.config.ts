@@ -31,7 +31,10 @@ export default defineManifest({
       run_at: 'document_idle',
     },
   ],
-  permissions: ['activeTab', 'tabs', 'scripting', 'storage', 'downloads'],
+  side_panel: {
+    default_path: 'src/sidepanel/index.html',
+  },
+  permissions: ['activeTab', 'tabs', 'scripting', 'storage', 'downloads', 'sidePanel'],
   host_permissions: ['<all_urls>'],
   commands: {
     'toggle-recording': {

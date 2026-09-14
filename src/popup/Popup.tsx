@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { RuntimeMessage } from '../types';
 import { createManual, listManuals } from '../db';
 import type { Manual } from '../types';
+import { openRecordingPanel } from '../sidepanel/open';
 
 interface State {
   recording: boolean;
@@ -43,6 +44,7 @@ export function Popup() {
   }, []);
 
   async function start() {
+    const panelOpened = openRecordingPanel();
     setBusy(true);
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const manual = await createManual(title.trim() || 'Manual sin título');
@@ -53,6 +55,7 @@ export function Popup() {
     } satisfies RuntimeMessage);
     await refresh();
     setBusy(false);
+    await panelOpened;
     window.close(); // cierra el popup para que la captura no lo incluya
   }
 
@@ -66,6 +69,7 @@ export function Popup() {
   }
 
   async function resume(manualId: string) {
+    const panelOpened = openRecordingPanel();
     setBusy(true);
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     await chrome.runtime.sendMessage({
@@ -75,6 +79,7 @@ export function Popup() {
     } satisfies RuntimeMessage);
     await refresh();
     setBusy(false);
+    await panelOpened;
     window.close(); // cierra el popup para que la captura no lo incluya
   }
 
