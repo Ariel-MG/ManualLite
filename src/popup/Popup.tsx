@@ -65,6 +65,19 @@ export function Popup() {
     if (finishedId) openEditor(finishedId);
   }
 
+  async function resume(manualId: string) {
+    setBusy(true);
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    await chrome.runtime.sendMessage({
+      type: 'START_RECORDING',
+      manualId,
+      tabId: tab?.id,
+    } satisfies RuntimeMessage);
+    await refresh();
+    setBusy(false);
+    window.close(); // cierra el popup para que la captura no lo incluya
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -155,11 +168,12 @@ export function Popup() {
           </div>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {recent.slice(0, 5).map((m) => (
-              <li key={m.id}>
+              <li key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <button
                   onClick={() => openEditor(m.id)}
                   style={{
-                    width: '100%',
+                    flex: 1,
+                    minWidth: 0,
                     textAlign: 'left',
                     padding: '6px 8px',
                     border: 'none',
@@ -168,10 +182,33 @@ export function Popup() {
                     cursor: 'pointer',
                     fontSize: 13,
                     color: '#111827',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   {m.title}
                 </button>
+                {!state.recording && (
+                  <button
+                    onClick={() => resume(m.id)}
+                    disabled={busy}
+                    title="Reanudar grabación de este manual"
+                    style={{
+                      flexShrink: 0,
+                      border: '1px solid #fecaca',
+                      background: '#fef2f2',
+                      color: '#dc2626',
+                      borderRadius: 6,
+                      padding: '5px 8px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ● Reanudar
+                  </button>
+                )}
               </li>
             ))}
           </ul>

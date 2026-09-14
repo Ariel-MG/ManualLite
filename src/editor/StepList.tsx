@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -17,6 +17,14 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Step, StepVariant } from '../types';
 import { fileToPngImage } from '../lib/image';
 
+/** Tipos de contenido que se pueden insertar en un punto de la lista. */
+export type InsertKind = 'section' | 'note' | 'rule' | 'image';
+
+/** Id del elemento del DOM que ancla un paso, para saltar a él desde el índice. */
+export function anchorId(stepId: string): string {
+  return `step-${stepId}`;
+}
+
 interface Props {
   steps: Step[];
   onReorder: (orderedIds: string[]) => void;
@@ -26,6 +34,7 @@ interface Props {
   onUpdateVariants: (stepId: string, variants: StepVariant[]) => void;
   onEditVariantImage: (step: Step, variant: StepVariant) => void;
   onDelete: (id: string) => void;
+  onInsert: (kind: InsertKind, index: number) => void;
 }
 
 export function StepList({
@@ -37,6 +46,7 @@ export function StepList({
   onUpdateVariants,
   onEditVariantImage,
   onDelete,
+  onInsert,
 }: Props) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -93,30 +103,103 @@ export function StepList({
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={steps.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Sin `gap`: la separación entre pasos la pone el propio punto de
+            inserción, que ocupa el mismo alto cuando está plegado. */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
           {(() => {
             let actionNo = 0;
-            return steps.map((step) => {
+            return steps.map((step, i) => {
               if (step.kind === 'action') actionNo += 1;
               return (
-                <SortableStep
-                  key={step.id}
-                  step={step}
-                  actionNumber={step.kind === 'action' ? actionNo : undefined}
-                  url={urls[step.id]}
-                  onCaption={onCaption}
-                  onDescription={onDescription}
-                  onEditImage={onEditImage}
-                  onUpdateVariants={onUpdateVariants}
-                  onEditVariantImage={onEditVariantImage}
-                  onDelete={onDelete}
-                />
+                <Fragment key={step.id}>
+                  <InsertPoint index={i} onInsert={onInsert} />
+                  <SortableStep
+                    step={step}
+                    actionNumber={step.kind === 'action' ? actionNo : undefined}
+                    url={urls[step.id]}
+                    onCaption={onCaption}
+                    onDescription={onDescription}
+                    onEditImage={onEditImage}
+                    onUpdateVariants={onUpdateVariants}
+                    onEditVariantImage={onEditVariantImage}
+                    onDelete={onDelete}
+                  />
+                </Fragment>
               );
             });
           })()}
+          <InsertPoint index={steps.length} onInsert={onInsert} />
         </div>
       </SortableContext>
     </DndContext>
+  );
+}
+
+const INSERT_LABELS: Record<InsertKind, string> = {
+  section: 'Sección',
+  note: 'Nota',
+  rule: 'Regla',
+  image: 'Imagen',
+};
+
+/**
+ * Franja entre dos pasos que al pasar el ratón (o al recibir el foco) ofrece
+ * insertar contenido justo ahí. Es lo que evita tener que crear el paso al
+ * final del manual y arrastrarlo decenas de posiciones hacia arriba.
+ */
+function InsertPoint({
+  index,
+  onInsert,
+}: {
+  index: number;
+  onInsert: (kind: InsertKind, index: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+      style={{
+        height: open ? 38 : 14,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        transition: 'height 120ms ease',
+      }}
+    >
+      {/* Los botones se quedan montados aunque no se vean, para poder llegar
+          a ellos con el tabulador. */}
+      <span style={{ flex: 1, height: 1, background: open ? '#e5e7eb' : 'transparent' }} />
+      {(Object.keys(INSERT_LABELS) as InsertKind[]).map((kind) => (
+        <button
+          key={kind}
+          onClick={() => onInsert(kind, index)}
+          title={`Insertar ${INSERT_LABELS[kind].toLowerCase()} aquí`}
+          style={{
+            opacity: open ? 1 : 0,
+            pointerEvents: open ? 'auto' : 'none',
+            border: '1px dashed #d1d5db',
+            background: '#fff',
+            borderRadius: 999,
+            padding: '4px 10px',
+            fontSize: 12,
+            fontWeight: 600,
+            color: '#6b7280',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            transition: 'opacity 120ms ease',
+          }}
+        >
+          + {INSERT_LABELS[kind]}
+        </button>
+      ))}
+      <span style={{ flex: 1, height: 1, background: open ? '#e5e7eb' : 'transparent' }} />
+    </div>
   );
 }
 
@@ -190,7 +273,7 @@ function SortableStep({
   // --- Sección ---
   if (isSection) {
     return (
-      <div ref={setNodeRef} style={wrapStyle}>
+      <div ref={setNodeRef} id={anchorId(step.id)} style={wrapStyle}>
         {dragHandle}
         <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.05em' }}>SECCIÓN</span>
         <input
@@ -207,7 +290,7 @@ function SortableStep({
   // --- Nota ---
   if (isNote) {
     return (
-      <div ref={setNodeRef} style={wrapStyle}>
+      <div ref={setNodeRef} id={anchorId(step.id)} style={wrapStyle}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 18 }}>💡</span>
           {dragHandle}
@@ -229,7 +312,7 @@ function SortableStep({
   // --- Regla / comportamiento condicional ---
   if (isRule) {
     return (
-      <div ref={setNodeRef} style={wrapStyle}>
+      <div ref={setNodeRef} id={anchorId(step.id)} style={wrapStyle}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 18 }}>⚖️</span>
           {dragHandle}
@@ -253,7 +336,7 @@ function SortableStep({
 
   // --- Acción (con imagen) ---
   return (
-    <div ref={setNodeRef} style={wrapStyle}>
+    <div ref={setNodeRef} id={anchorId(step.id)} style={wrapStyle}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
         <span
           style={{ width: 28, height: 28, borderRadius: '50%', background: '#dc2626', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 13 }}

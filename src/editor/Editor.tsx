@@ -15,10 +15,14 @@ import { StepList } from './StepList';
 import { ExportBar } from './ExportBar';
 import { ManualLibrary } from './ManualLibrary';
 import { StepImageEditor, type ImagePatch } from './StepImageEditor';
+import { StepOutline } from './StepOutline';
 
 function getManualIdFromUrl(): string | null {
   return new URLSearchParams(location.search).get('id');
 }
+
+/** Ancho mínimo de ventana para que quepa el índice lateral junto al contenido. */
+const WIDE_QUERY = '(min-width: 1100px)';
 
 /** Objetivo de edición de imagen: la imagen principal de un paso o la de una variante. */
 type ImageTarget =
@@ -32,6 +36,8 @@ export function Editor() {
   const [loading, setLoading] = useState(true);
   const [editImage, setEditImage] = useState<ImageTarget | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  /** Posición donde insertar la imagen que se está eligiendo (null = al final). */
+  const pendingInsertIndex = useRef<number | null>(null);
 
   function openManual(id: string) {
     history.pushState({}, '', `?id=${id}`);
@@ -48,6 +54,15 @@ export function Editor() {
     const onPop = () => setManualId(getManualIdFromUrl());
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  // El índice lateral solo cabe en ventanas anchas; por debajo estorbaría.
+  const [wide, setWide] = useState(() => window.matchMedia(WIDE_QUERY).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(WIDE_QUERY);
+    const onChange = () => setWide(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
   }, []);
 
   const load = useCallback(async () => {
@@ -118,10 +133,21 @@ export function Editor() {
     if (manual) setSteps(await getSteps(manual.id));
   }
 
-  async function addText(kind: 'section' | 'note' | 'rule') {
+  /** Sin `index` el paso va al final; con `index` se inserta en esa posición. */
+  async function addText(kind: 'section' | 'note' | 'rule', index?: number) {
     if (!manual) return;
-    await addTextStep(manual.id, kind);
+    await addTextStep(manual.id, kind, index);
     setSteps(await getSteps(manual.id));
+  }
+
+  /** Añade contenido en un punto de inserción de la lista. */
+  function insertAt(kind: 'section' | 'note' | 'rule' | 'image', index: number) {
+    if (kind === 'image') {
+      pendingInsertIndex.current = index;
+      imageInputRef.current?.click();
+      return;
+    }
+    addText(kind, index);
   }
 
   async function updateVariants(stepId: string, variants: StepVariant[]) {
@@ -132,9 +158,12 @@ export function Editor() {
   async function addImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ''; // permite volver a elegir el mismo archivo
+    // El input es único y oculto: la posición destino la dejó `insertAt`.
+    const index = pendingInsertIndex.current ?? undefined;
+    pendingInsertIndex.current = null;
     if (!file || !manual) return;
     try {
-      await addImageStep(manual.id, file);
+      await addImageStep(manual.id, file, index);
       setSteps(await getSteps(manual.id));
     } catch {
       alert('No se pudo cargar la imagen. Asegúrate de que sea un archivo de imagen válido.');
@@ -177,7 +206,13 @@ export function Editor() {
   }
 
   return (
-    <div style={{ maxWidth: 880, margin: '0 auto', padding: '24px 20px 80px' }}>
+    <div
+      style={{
+        maxWidth: wide ? 1160 : 880,
+        margin: '0 auto',
+        padding: '24px 20px 80px',
+      }}
+    >
       <header
         style={{
           display: 'flex',
@@ -226,39 +261,49 @@ export function Editor() {
         </div>
       </header>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <CoverForm manual={manual} onChange={patchManual} />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => addText('section')} style={addBtn}>
-            + Sección
-          </button>
-          <button onClick={() => addText('note')} style={addBtn}>
-            + Nota
-          </button>
-          <button onClick={() => addText('rule')} style={addBtn}>
-            + Regla
-          </button>
-          <button onClick={() => imageInputRef.current?.click()} style={addBtn}>
-            + Imagen
-          </button>
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/*"
-            onChange={addImage}
-            style={{ display: 'none' }}
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+        {wide && <StepOutline steps={steps} />}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <CoverForm manual={manual} onChange={patchManual} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => addText('section')} style={addBtn}>
+              + Sección
+            </button>
+            <button onClick={() => addText('note')} style={addBtn}>
+              + Nota
+            </button>
+            <button onClick={() => addText('rule')} style={addBtn}>
+              + Regla
+            </button>
+            <button
+              onClick={() => {
+                pendingInsertIndex.current = null;
+                imageInputRef.current?.click();
+              }}
+              style={addBtn}
+            >
+              + Imagen
+            </button>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              onChange={addImage}
+              style={{ display: 'none' }}
+            />
+          </div>
+          <StepList
+            steps={steps}
+            onReorder={reorder}
+            onCaption={changeCaption}
+            onDescription={changeDescription}
+            onEditImage={(step) => setEditImage({ kind: 'step', step })}
+            onUpdateVariants={updateVariants}
+            onEditVariantImage={(step, variant) => setEditImage({ kind: 'variant', step, variant })}
+            onDelete={removeStep}
+            onInsert={insertAt}
           />
         </div>
-        <StepList
-          steps={steps}
-          onReorder={reorder}
-          onCaption={changeCaption}
-          onDescription={changeDescription}
-          onEditImage={(step) => setEditImage({ kind: 'step', step })}
-          onUpdateVariants={updateVariants}
-          onEditVariantImage={(step, variant) => setEditImage({ kind: 'variant', step, variant })}
-          onDelete={removeStep}
-        />
       </div>
 
       {editImage && (

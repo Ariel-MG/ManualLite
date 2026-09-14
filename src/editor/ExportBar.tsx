@@ -36,7 +36,14 @@ export function ExportBar({ manual, steps }: Props) {
       await exporter(manual, steps, quality);
     } catch (err) {
       console.error(err);
-      alert('No se pudo exportar: ' + (err as Error).message);
+      const msg = (err as Error).message ?? '';
+      // Tras recompilar la extensión, los chunks cambian de hash y la pestaña
+      // vieja pide un módulo que ya no existe. No es un fallo de exportación.
+      if (/dynamically imported module|Failed to fetch/i.test(msg)) {
+        alert('La extensión se actualizó. Recarga esta pestaña (Cmd/Ctrl+R) y vuelve a exportar.');
+      } else {
+        alert('No se pudo exportar: ' + msg);
+      }
     } finally {
       setBusy(null);
     }
