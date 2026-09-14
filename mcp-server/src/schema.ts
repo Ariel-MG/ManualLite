@@ -11,8 +11,17 @@ export const FORMAT = 'ManualLite';
 
 const ClickPoint = z.object({ x: z.number(), y: z.number() });
 
+const SerializedVariant = z.object({
+  label: z.string(),
+  description: z.string().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  screenshot: z.string().optional(), // dataURL
+  annotated: z.string().optional(), // dataURL
+});
+
 const SerializedStep = z.object({
-  kind: z.enum(['action', 'section', 'note']).optional(),
+  kind: z.enum(['action', 'section', 'note', 'rule']).optional(),
   caption: z.string(),
   description: z.string().optional(),
   url: z.string().optional(),
@@ -29,6 +38,7 @@ const SerializedStep = z.object({
     .optional(),
   screenshot: z.string().optional(), // dataURL (solo acciones)
   annotated: z.string().optional(), // dataURL
+  variants: z.array(SerializedVariant).optional(),
 });
 
 const ManualMeta = z.object({

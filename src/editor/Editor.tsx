@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { Manual, Step } from '../types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Manual, Step, StepVariant } from '../types';
 import {
+  addImageStep,
   addTextStep,
   deleteStep,
   getManual,
@@ -19,12 +20,18 @@ function getManualIdFromUrl(): string | null {
   return new URLSearchParams(location.search).get('id');
 }
 
+/** Objetivo de edición de imagen: la imagen principal de un paso o la de una variante. */
+type ImageTarget =
+  | { kind: 'step'; step: Step }
+  | { kind: 'variant'; step: Step; variant: StepVariant };
+
 export function Editor() {
   const [manualId, setManualId] = useState<string | null>(getManualIdFromUrl());
   const [manual, setManual] = useState<Manual | null>(null);
   const [steps, setSteps] = useState<Step[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editImage, setEditImage] = useState<Step | null>(null);
+  const [editImage, setEditImage] = useState<ImageTarget | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   function openManual(id: string) {
     history.pushState({}, '', `?id=${id}`);
@@ -111,17 +118,42 @@ export function Editor() {
     if (manual) setSteps(await getSteps(manual.id));
   }
 
-  async function addText(kind: 'section' | 'note') {
+  async function addText(kind: 'section' | 'note' | 'rule') {
     if (!manual) return;
     await addTextStep(manual.id, kind);
     setSteps(await getSteps(manual.id));
   }
 
+  async function updateVariants(stepId: string, variants: StepVariant[]) {
+    setSteps((prev) => prev.map((s) => (s.id === stepId ? { ...s, variants } : s)));
+    await updateStep(stepId, { variants });
+  }
+
+  async function addImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite volver a elegir el mismo archivo
+    if (!file || !manual) return;
+    try {
+      await addImageStep(manual.id, file);
+      setSteps(await getSteps(manual.id));
+    } catch {
+      alert('No se pudo cargar la imagen. Asegúrate de que sea un archivo de imagen válido.');
+    }
+  }
+
   async function applyImagePatch(patch: ImagePatch) {
     if (!editImage) return;
-    const id = editImage.id;
-    setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-    await updateStep(id, patch);
+    if (editImage.kind === 'step') {
+      const id = editImage.step.id;
+      setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+      await updateStep(id, patch);
+    } else {
+      const { step, variant } = editImage;
+      const variants = (step.variants ?? []).map((v) =>
+        v.id === variant.id ? { ...v, ...patch } : v,
+      );
+      await updateVariants(step.id, variants);
+    }
     setEditImage(null);
   }
 
@@ -203,20 +235,35 @@ export function Editor() {
           <button onClick={() => addText('note')} style={addBtn}>
             + Nota
           </button>
+          <button onClick={() => addText('rule')} style={addBtn}>
+            + Regla
+          </button>
+          <button onClick={() => imageInputRef.current?.click()} style={addBtn}>
+            + Imagen
+          </button>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            onChange={addImage}
+            style={{ display: 'none' }}
+          />
         </div>
         <StepList
           steps={steps}
           onReorder={reorder}
           onCaption={changeCaption}
           onDescription={changeDescription}
-          onEditImage={setEditImage}
+          onEditImage={(step) => setEditImage({ kind: 'step', step })}
+          onUpdateVariants={updateVariants}
+          onEditVariantImage={(step, variant) => setEditImage({ kind: 'variant', step, variant })}
           onDelete={removeStep}
         />
       </div>
 
       {editImage && (
         <StepImageEditor
-          step={editImage}
+          source={editImage.kind === 'step' ? editImage.step : editImage.variant}
           onClose={() => setEditImage(null)}
           onApply={applyImagePatch}
         />

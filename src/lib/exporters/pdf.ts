@@ -156,6 +156,30 @@ export async function exportPdf(
       continue;
     }
 
+    if (step.kind === 'rule') {
+      if (!step.description?.trim()) continue;
+      stepContent.push({
+        table: {
+          widths: ['*'],
+          body: [
+            [
+              {
+                text: [
+                  { text: 'Regla   ', bold: true, color: '#1d4ed8' },
+                  { text: step.description, color: '#1e3a8a' },
+                ],
+                margin: [12, 10, 12, 10],
+              },
+            ],
+          ],
+        },
+        layout: { defaultBorder: false, fillColor: () => '#eff6ff' },
+        margin: [0, i === 0 ? 0 : 6, 0, 0],
+      } as Content);
+      addDivider(stepContent, steps, i, contentWidth);
+      continue;
+    }
+
     // Acción (con imagen)
     actionNo += 1;
     const img = step.annotated ?? step.screenshot;
@@ -181,6 +205,25 @@ export async function exportPdf(
 
     // Cada paso se mantiene junto y no se parte entre páginas.
     stepContent.push({ stack: block, unbreakable: true, margin: [0, i === 0 ? 0 : 6, 0, 0] });
+
+    // Caminos alternativos (variantes), cada uno como bloque indentado.
+    let vi = 0;
+    for (const v of step.variants ?? []) {
+      vi += 1;
+      const label = v.label || `Opción ${vi}`;
+      const vBlock: Content[] = [{ text: label, bold: true, color: ACCENT, margin: [0, 0, 0, 6] }];
+      const vImg = v.annotated ?? v.screenshot;
+      if (vImg && v.width && v.height) {
+        const vUrl = await exportImageDataUrl(vImg, quality);
+        const [vw, vh] = imageFit(v.width, v.height, contentWidth - 16);
+        vBlock.push({ image: vUrl, width: vw, height: vh, alignment: 'center' });
+      }
+      if (v.description?.trim()) {
+        vBlock.push({ text: v.description, style: 'stepDesc', margin: [0, 8, 0, 0] });
+      }
+      stepContent.push({ stack: vBlock, unbreakable: true, margin: [16, 8, 0, 0] });
+    }
+
     addDivider(stepContent, steps, i, contentWidth);
   }
 

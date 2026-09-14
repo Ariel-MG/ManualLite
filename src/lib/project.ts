@@ -5,6 +5,15 @@ import { blobToDataURL, downloadBlob, safeName } from './blob';
 const FORMAT = 'ManualLite';
 const FORMAT_VERSION = 1;
 
+interface SerializedVariant {
+  label: string;
+  description?: string;
+  width?: number;
+  height?: number;
+  screenshot?: string; // dataURL
+  annotated?: string; // dataURL
+}
+
 interface SerializedStep {
   kind?: Step['kind'];
   caption: string;
@@ -17,6 +26,7 @@ interface SerializedStep {
   element?: Step['element'];
   screenshot?: string; // dataURL (solo acciones)
   annotated?: string; // dataURL
+  variants?: SerializedVariant[];
 }
 
 interface ProjectFile {
@@ -73,6 +83,18 @@ export async function exportProject(manual: Manual, steps: Step[]): Promise<void
         element: s.element,
         screenshot: s.screenshot ? await blobToDataURL(s.screenshot) : undefined,
         annotated: s.annotated ? await blobToDataURL(s.annotated) : undefined,
+        variants: s.variants?.length
+          ? await Promise.all(
+              s.variants.map(async (v) => ({
+                label: v.label,
+                description: v.description,
+                width: v.width,
+                height: v.height,
+                screenshot: v.screenshot ? await blobToDataURL(v.screenshot) : undefined,
+                annotated: v.annotated ? await blobToDataURL(v.annotated) : undefined,
+              })),
+            )
+          : undefined,
       })),
     ),
   };
@@ -101,6 +123,19 @@ export async function importProject(file: File): Promise<string> {
   });
 
   for (const s of parsed.steps) {
+    const variants = s.variants?.length
+      ? await Promise.all(
+          s.variants.map(async (v) => ({
+            id: crypto.randomUUID(),
+            label: v.label,
+            description: v.description,
+            width: v.width,
+            height: v.height,
+            screenshot: v.screenshot ? await dataUrlToBlob(v.screenshot) : undefined,
+            annotated: v.annotated ? await dataUrlToBlob(v.annotated) : undefined,
+          })),
+        )
+      : undefined;
     await addStep({
       manualId: manual.id,
       kind: s.kind ?? 'action',
@@ -114,6 +149,7 @@ export async function importProject(file: File): Promise<string> {
       caption: s.caption,
       description: s.description,
       url: s.url,
+      variants,
     });
   }
 

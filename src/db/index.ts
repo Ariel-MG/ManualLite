@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { Manual, Step } from '../types';
+import { fileToPngImage } from '../lib/image';
 
 interface ManualLiteDB extends DBSchema {
   manuals: {
@@ -132,16 +133,35 @@ export async function getSteps(manualId: string): Promise<Step[]> {
   return steps.sort((a, b) => a.order - b.order);
 }
 
-/** Añade un paso de solo texto (sección o nota) al final del manual. */
+/** Añade un paso de solo texto (sección, nota o regla) al final del manual. */
 export async function addTextStep(
   manualId: string,
-  kind: 'section' | 'note',
+  kind: 'section' | 'note' | 'rule',
 ): Promise<Step> {
+  const placeholder: Record<typeof kind, string | undefined> = {
+    section: undefined,
+    note: 'Escribe aquí tu nota…',
+    rule: 'Describe la regla o el comportamiento condicional…',
+  };
   return addStep({
     manualId,
     kind,
     caption: kind === 'section' ? 'Nueva sección' : '',
-    description: kind === 'note' ? 'Escribe aquí tu nota…' : undefined,
+    description: placeholder[kind],
+  });
+}
+
+/** Añade un paso de acción a partir de una imagen subida por el usuario.
+ * La imagen se normaliza a PNG (sin pérdida), igual que las capturas grabadas. */
+export async function addImageStep(manualId: string, file: Blob): Promise<Step> {
+  const { blob, width, height } = await fileToPngImage(file);
+  return addStep({
+    manualId,
+    kind: 'action',
+    screenshot: blob,
+    width,
+    height,
+    caption: 'Nuevo paso',
   });
 }
 

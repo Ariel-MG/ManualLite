@@ -41,3 +41,24 @@ export async function reencode(blob: Blob, quality: ImageQuality): Promise<Blob>
 export async function exportImageDataUrl(blob: Blob, quality: ImageQuality): Promise<string> {
   return blobToDataURL(await reencode(blob, quality));
 }
+
+/**
+ * Decodifica una imagen subida por el usuario y la normaliza a PNG (sin
+ * pérdida), devolviendo también sus dimensiones reales en px.
+ */
+export async function fileToPngImage(
+  file: Blob,
+): Promise<{ blob: Blob; width: number; height: number }> {
+  const bmp = await createImageBitmap(file);
+  const width = bmp.width;
+  const height = bmp.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext('2d')!.drawImage(bmp, 0, 0);
+  bmp.close();
+  const blob = await new Promise<Blob>((resolve) =>
+    canvas.toBlob((b) => resolve(b!), 'image/png'),
+  );
+  return { blob, width, height };
+}

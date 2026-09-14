@@ -64,6 +64,13 @@ export function registerTools(server: McpServer): void {
             description: s.description,
             url: s.url,
             hasImage: Boolean(s.annotated || s.screenshot),
+            variants: s.variants?.length
+              ? s.variants.map((v) => ({
+                  label: v.label,
+                  description: v.description,
+                  hasImage: Boolean(v.annotated || v.screenshot),
+                }))
+              : undefined,
           })),
         };
         return jsonText(summary);

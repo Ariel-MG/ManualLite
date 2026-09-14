@@ -16,8 +16,23 @@ export interface ClickedElement {
  * - 'action': capturado por click (tiene imagen).
  * - 'section': encabezado de sección (agrupa pasos, sale en el índice).
  * - 'note': nota/aviso de solo texto.
+ * - 'rule': regla/comportamiento condicional o pendiente (solo texto, destacado).
  */
-export type StepKind = 'action' | 'section' | 'note';
+export type StepKind = 'action' | 'section' | 'note' | 'rule';
+
+/**
+ * Variante de un paso de acción: un camino alternativo según una condición
+ * (p. ej. "Si IMSS / Bienestar"). Cada variante puede llevar su propia imagen.
+ */
+export interface StepVariant {
+  id: string;
+  label: string; // condición libre escrita por el usuario
+  description?: string;
+  screenshot?: Blob;
+  annotated?: Blob;
+  width?: number;
+  height?: number;
+}
 
 export interface Step {
   id: string;
@@ -37,6 +52,8 @@ export interface Step {
   clickOnImage?: ClickPoint;
   element?: ClickedElement;
   url?: string;
+  /** Caminos alternativos del paso según una condición (solo para 'action'). */
+  variants?: StepVariant[];
   createdAt: number;
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Step } from '../types';
+import type { ClickPoint } from '../types';
 
 interface Rect {
   x: number;
@@ -14,8 +14,18 @@ export interface ImagePatch {
   height: number;
 }
 
+/** Fuente de imagen editable: la cumple tanto un Step como una StepVariant. */
+export interface ImageSource {
+  screenshot?: Blob;
+  annotated?: Blob;
+  width?: number;
+  height?: number;
+  clickOnImage?: ClickPoint;
+  caption?: string;
+}
+
 interface Props {
-  step: Step;
+  source: ImageSource;
   onClose: () => void;
   onApply: (patch: ImagePatch) => void;
 }
@@ -56,7 +66,7 @@ function norm(r: Rect): Rect {
   };
 }
 
-export function StepImageEditor({ step, onClose, onApply }: Props) {
+export function StepImageEditor({ source, onClose, onApply }: Props) {
   const [imgUrl, setImgUrl] = useState<string>('');
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,22 +86,22 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
   const dragging = useRef(false);
 
   useEffect(() => {
-    const img = step.annotated ?? step.screenshot;
+    const img = source.annotated ?? source.screenshot;
     if (!img) return;
     const url = URL.createObjectURL(img);
     setImgUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [step]);
+  }, [source]);
 
   function onImgLoad() {
-    const natW = imgRef.current?.naturalWidth || step.width || 0;
-    const natH = imgRef.current?.naturalHeight || step.height || 0;
+    const natW = imgRef.current?.naturalWidth || source.width || 0;
+    const natH = imgRef.current?.naturalHeight || source.height || 0;
     const w = Math.min(MAX_DISPLAY_W, natW);
     const scale = w / natW;
     setDisplay({ w, h: natH * scale, scale });
     // Centro de foco por defecto: el punto del click registrado.
-    if (step.clickOnImage) {
-      setFocus({ x: step.clickOnImage.x * scale, y: step.clickOnImage.y * scale });
+    if (source.clickOnImage) {
+      setFocus({ x: source.clickOnImage.x * scale, y: source.clickOnImage.y * scale });
     } else {
       setFocus({ x: w / 2, y: (natH * scale) / 2 });
     }
@@ -384,7 +394,7 @@ export function StepImageEditor({ step, onClose, onApply }: Props) {
               onLoad={onImgLoad}
               draggable={false}
               style={{ display: 'block', width: display.w || 'auto', userSelect: 'none' }}
-              alt={step.caption}
+              alt={source.caption}
             />
 
             {/* Zonas de difuminado ya marcadas */}

@@ -51,17 +51,42 @@ export async function exportHtml(
       );
       continue;
     }
+    if (s.kind === 'rule') {
+      if (!s.description?.trim()) continue;
+      bodyParts.push(
+        `<div class="rule" id="${anchor}"><strong>Regla</strong> ${esc(s.description).replace(/\n/g, '<br />')}</div>`,
+      );
+      continue;
+    }
 
     const img = s.annotated ?? s.screenshot;
     if (!img) continue;
     actionNo += 1;
     const dataUrl = await exportImageDataUrl(img, quality);
     tocItems.push(`<li><a href="#${anchor}">Paso ${actionNo}. ${esc(s.caption)}</a></li>`);
+
+    // Caminos alternativos (variantes) del paso.
+    let variantsHtml = '';
+    let vi = 0;
+    for (const v of s.variants ?? []) {
+      vi += 1;
+      const label = v.label || `Opción ${vi}`;
+      const vImg = v.annotated ?? v.screenshot;
+      const vDataUrl = vImg ? await exportImageDataUrl(vImg, quality) : '';
+      variantsHtml += `
+      <div class="variant">
+        <p class="variant-label">${esc(label)}</p>
+        ${vDataUrl ? `<img src="${vDataUrl}" alt="${esc(label)}" loading="lazy" />` : ''}
+        ${v.description?.trim() ? `<p class="desc">${esc(v.description).replace(/\n/g, '<br />')}</p>` : ''}
+      </div>`;
+    }
+
     bodyParts.push(`
     <section class="step" id="${anchor}">
       <h2><span class="num">${actionNo}</span> ${esc(s.caption)}</h2>
       <img src="${dataUrl}" alt="${esc(s.caption)}" loading="lazy" />
       ${s.description ? `<p class="desc">${esc(s.description).replace(/\n/g, '<br />')}</p>` : ''}
+      ${variantsHtml}
     </section>`);
   }
 
@@ -100,6 +125,12 @@ export async function exportHtml(
   h2.section { color:var(--accent); font-size:1.6rem; margin: 34px 0 8px; padding-bottom:8px; border-bottom:2px solid var(--accent); scroll-margin-top:20px; }
   .note { background:#fffbeb; border:1px solid #fde68a; border-left:4px solid var(--accent); border-radius:8px; padding:14px 16px; margin: 0 0 26px; color:#92400e; line-height:1.6; }
   .note strong { color:var(--accent); }
+  .rule { background:#eff6ff; border:1px solid #bfdbfe; border-left:4px solid #2563eb; border-radius:8px; padding:14px 16px; margin: 0 0 26px; color:#1e3a8a; line-height:1.6; }
+  .rule strong { color:#1d4ed8; }
+  .variant { border-left:3px solid #6366f1; background:#fafafe; border-radius:8px; padding:14px 16px; margin: 16px 0 0; }
+  .variant-label { margin:0 0 10px; font-weight:700; color:#4338ca; }
+  .variant img { width:100%; height:auto; border:1px solid #e5e7eb; border-radius:8px; display:block; }
+  .variant .desc { margin: 12px 0 0; }
   .toc-section a { font-weight:700; }
 </style>
 </head>

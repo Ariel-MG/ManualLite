@@ -44,7 +44,7 @@ export async function exportMarkdown(
   steps.forEach((s) => {
     if (s.kind === 'section') {
       lines.push(`- **${s.caption}**`);
-    } else if (s.kind !== 'note') {
+    } else if (s.kind === 'action') {
       n += 1;
       lines.push(`${n}. [Paso ${n}. ${s.caption}](#paso-${n}-${slug(s.caption)})`);
     }
@@ -62,6 +62,10 @@ export async function exportMarkdown(
       if (s.description?.trim()) lines.push(`> **Nota:** ${s.description}`, '');
       continue;
     }
+    if (s.kind === 'rule') {
+      if (s.description?.trim()) lines.push(`> **Regla:** ${s.description}`, '');
+      continue;
+    }
     const img = s.annotated ?? s.screenshot;
     if (!img) continue;
     actionNo += 1;
@@ -70,6 +74,20 @@ export async function exportMarkdown(
     lines.push(`## Paso ${actionNo}. ${s.caption}`, '');
     lines.push(`![Paso ${actionNo}](images/${name})`, '');
     if (s.description) lines.push(s.description, '');
+
+    // Caminos alternativos (variantes) del paso.
+    let vi = 0;
+    for (const v of s.variants ?? []) {
+      vi += 1;
+      lines.push(`**${v.label || `Opción ${vi}`}**`, '');
+      const vImg = v.annotated ?? v.screenshot;
+      if (vImg) {
+        const vName = `step-${actionNo}-v${vi}.${ext}`;
+        imagesDir.file(vName, await reencode(vImg, quality));
+        lines.push(`![${v.label || `Opción ${vi}`}](images/${vName})`, '');
+      }
+      if (v.description?.trim()) lines.push(v.description, '');
+    }
   }
 
   zip.file(`${safeName(manual.title)}.md`, lines.join('\n'));
