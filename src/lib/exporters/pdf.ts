@@ -1,45 +1,157 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
-import type { Manual, PageSize, Step } from '../../types';
+import type { Manual, PageSize, Step, StepVariant } from '../../types';
+
+/** El PDF acepta Blob (editor) o data URL (export desde .manuallite.json). */
+type PdfImage = Blob | string;
+type PdfVariant = Omit<StepVariant, 'screenshot' | 'annotated'> & {
+  screenshot?: PdfImage;
+  annotated?: PdfImage;
+};
+export type PdfStep = Omit<Step, 'screenshot' | 'annotated' | 'variants'> & {
+  screenshot?: PdfImage;
+  annotated?: PdfImage;
+  variants?: PdfVariant[];
+};
 import { DEFAULT_ACCENT } from '../../types';
 import { blobToDataURL, safeName } from '../blob';
 import { exportImageDataUrl, type ImageQuality } from '../image';
+import {
+  imageFit,
+  packBlocks,
+  textHeight,
+  type MeasuredBlock,
+  type PlacedBlock,
+} from './pdfLayout';
+import { buildTocEntries, tocLine } from './toc';
 
 // pdfmake necesita su sistema de fuentes virtual (vfs). El shape ha cambiado
 // entre versiones, por eso resolvemos de forma defensiva.
-const vfs =
-  (pdfFonts as unknown as { pdfMake?: { vfs: Record<string, string> }; vfs?: Record<string, string> })
-    .pdfMake?.vfs ??
-  (pdfFonts as unknown as { vfs: Record<string, string> }).vfs;
-(pdfMake as unknown as { vfs: Record<string, string> }).vfs = vfs;
-
-const PAGE_WIDTHS: Record<PageSize, number> = { A4: 595.28, LETTER: 612 };
-const MARGIN_X = 48;
-const MAX_IMG_HEIGHT = 560; // evita que capturas muy altas desborden la página
-
-function imageFit(natW: number, natH: number, contentWidth: number): [number, number] {
-  const ratio = natH / natW;
-  let w = Math.min(contentWidth, natW);
-  let h = w * ratio;
-  if (h > MAX_IMG_HEIGHT) {
-    h = MAX_IMG_HEIGHT;
-    w = h / ratio;
+function resolvePdfMakeVfs(mod: unknown): Record<string, string> {
+  const rec = mod as Record<string, unknown> | undefined;
+  if (rec && typeof rec['Roboto-Medium.ttf'] === 'string') return rec as Record<string, string>;
+  const nested = rec?.pdfMake as { vfs?: Record<string, string> } | undefined;
+  if (nested?.vfs) return nested.vfs;
+  if (rec?.vfs && typeof (rec.vfs as Record<string, unknown>)['Roboto-Medium.ttf'] === 'string') {
+    return rec.vfs as Record<string, string>;
   }
-  return [w, h];
+  const def = rec?.default as Record<string, unknown> | undefined;
+  if (def && typeof def['Roboto-Medium.ttf'] === 'string') return def as Record<string, string>;
+  const defNested = def?.pdfMake as { vfs?: Record<string, string> } | undefined;
+  if (defNested?.vfs) return defNested.vfs;
+  throw new Error('No se pudo cargar el VFS de fuentes de pdfmake.');
+}
+
+(pdfMake as unknown as { vfs: Record<string, string> }).vfs = resolvePdfMakeVfs(pdfFonts);
+
+const PAGE_SIZES: Record<PageSize, { width: number; height: number }> = {
+  A4: { width: 595.28, height: 841.89 },
+  LETTER: { width: 612, height: 792 },
+};
+const MARGIN_X = 48;
+const MARGIN_TOP = 64;
+const MARGIN_BOTTOM = 56;
+
+/** Separación a cada lado del divisor entre pasos. */
+const DIVIDER_GAP = 10;
+/** Alto total que ocupa un divisor: hueco + línea + hueco. */
+const DIVIDER_H = DIVIDER_GAP * 2 + 0.7;
+/** Recuadro de captura: padding interno + borde (no se encoge con la imagen). */
+const IMG_FRAME_PAD = 4;
+const IMG_FRAME_BORDER = 1;
+const IMG_FRAME_CHROME = IMG_FRAME_PAD * 2 + IMG_FRAME_BORDER * 2;
+
+/**
+ * Un bloque en construcción: lo que mide y cómo se dibuja una vez que el
+ * empaquetador ha decidido dónde va y con qué escala.
+ */
+interface Draft {
+  measured: MeasuredBlock;
+  render: (placed: PlacedBlock) => Content;
 }
 
 function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString('es', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-/** Inserta una línea divisoria si el ítem no es el último. */
-function addDivider(out: Content[], steps: Step[], i: number, contentWidth: number): void {
-  if (i >= steps.length - 1) return;
-  out.push({
+/** Línea divisoria entre pasos. Se emite como último hijo del stack del bloque. */
+function divider(contentWidth: number): Content {
+  return {
     canvas: [{ type: 'line', x1: 0, y1: 0, x2: contentWidth, y2: 0, lineWidth: 0.7, lineColor: '#e5e7eb' }],
-    margin: [0, 20, 0, 20],
+    margin: [0, DIVIDER_GAP, 0, DIVIDER_GAP],
+  };
+}
+
+/** Captura encerrada en un recuadro (mismo criterio que el HTML). */
+function framedImage(dataUrl: string, width: number, height: number): Content {
+  return {
+    table: {
+      widths: [width],
+      body: [[{ image: dataUrl, width, height }]],
+    },
+    alignment: 'center',
+    layout: {
+      hLineWidth: () => IMG_FRAME_BORDER,
+      vLineWidth: () => IMG_FRAME_BORDER,
+      hLineColor: () => '#e5e7eb',
+      vLineColor: () => '#e5e7eb',
+      paddingLeft: () => IMG_FRAME_PAD,
+      paddingRight: () => IMG_FRAME_PAD,
+      paddingTop: () => IMG_FRAME_PAD,
+      paddingBottom: () => IMG_FRAME_PAD,
+    },
+  };
+}
+
+function tocContent(steps: PdfStep[], accent: string): Content {
+  const entries = buildTocEntries(steps, { requireSize: true });
+  const body = entries.map((entry, i) => {
+    const isSection = entry.kind === 'section';
+    return [
+      {
+        text: `${i + 1}.  ${tocLine(entry)}`,
+        bold: isSection,
+        fontSize: isSection ? 12 : 11,
+        color: isSection ? accent : '#111827',
+        margin: [4, 3, 4, 3],
+      },
+    ];
   });
+  return {
+    stack: [
+      { text: 'Índice', style: 'tocTitle' },
+      {
+        table: {
+          widths: ['*'],
+          body: body.length ? body : [[{ text: ' ' }]],
+        },
+        layout: {
+          defaultBorder: false,
+          hLineWidth: (i: number, node: { table: { body: unknown[] } }) =>
+            i === 0 || i === node.table.body.length ? 1 : 0,
+          vLineWidth: () => 1,
+          hLineColor: () => '#e5e7eb',
+          vLineColor: () => '#e5e7eb',
+          fillColor: () => '#f9fafb',
+          paddingLeft: () => 16,
+          paddingRight: () => 16,
+          paddingTop: () => 6,
+          paddingBottom: () => 6,
+        },
+      },
+    ],
+    pageBreak: 'after',
+  } as Content;
+}
+
+async function resolveImageSrc(
+  img: Blob | string | undefined,
+  quality: ImageQuality,
+): Promise<string | undefined> {
+  if (!img) return undefined;
+  if (typeof img === 'string') return img;
+  return exportImageDataUrl(img, quality);
 }
 
 export async function exportPdf(
@@ -47,11 +159,32 @@ export async function exportPdf(
   steps: Step[],
   quality: ImageQuality = 'medium',
 ): Promise<void> {
+  const doc = await buildPdfDoc(manual, steps, quality);
+  pdfMake.createPdf(doc).download(`${safeName(manual.title)}.pdf`);
+}
+
+/**
+ * Arma el documento pdfmake. Separado de la descarga para poder renderizarlo
+ * y comprobar la paginación fuera del navegador.
+ */
+export async function buildPdfDoc(
+  manual: Omit<Manual, 'logo'> & { logo?: Blob | string },
+  steps: PdfStep[],
+  quality: ImageQuality = 'medium',
+): Promise<TDocumentDefinitions> {
   const ACCENT = manual.accentColor ?? DEFAULT_ACCENT;
   const pageSize: PageSize = manual.pageSize ?? 'A4';
-  const pageW = PAGE_WIDTHS[pageSize];
+  const pageW = PAGE_SIZES[pageSize].width;
   const contentWidth = pageW - MARGIN_X * 2;
-  const logoDataUrl = manual.logo ? await blobToDataURL(manual.logo) : undefined;
+  const usableHeight = PAGE_SIZES[pageSize].height - MARGIN_TOP - MARGIN_BOTTOM;
+  // Tope de altura de captura: deja sitio al título, la descripción y el
+  // divisor, de modo que un paso siempre quepa en una hoja.
+  const maxImgHeight = usableHeight - 160;
+  const logoDataUrl = !manual.logo
+    ? undefined
+    : typeof manual.logo === 'string'
+      ? manual.logo
+      : await blobToDataURL(manual.logo);
 
   // --- Portada ---
   const cover: Content[] = [];
@@ -109,127 +242,210 @@ export async function exportPdf(
   // Salto de página al final de la portada.
   cover.push({ text: '', pageBreak: 'after' });
 
-  // --- Índice automático ---
-  const toc: Content = {
-    toc: { title: { text: 'Índice', style: 'tocTitle' } },
-    pageBreak: 'after',
-  };
+  // --- Índice persistente (mismo criterio que HTML/Markdown) ---
+  const toc: Content = tocContent(steps, ACCENT);
 
-  // --- Pasos ---
-  const stepContent: Content[] = [];
+  // --- Pasos: primera pasada, medir ---
+  // Construimos cada bloque junto con su altura estimada. Los saltos de página
+  // los decide `packBlocks` después, cuando ya conoce todas las alturas.
+  const drafts: Draft[] = [];
   let actionNo = 0;
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i];
-
+  for (const step of steps) {
     if (step.kind === 'section') {
-      stepContent.push({
-        text: step.caption || 'Sección',
+      const caption = step.caption || 'Sección';
+      // Cuando la sección continúa en la hoja en curso lleva una regla de color
+      // encima para que se lea como corte de sección y no como un paso más.
+      const height = textHeight(caption, 19, contentWidth) + 12 + 16;
+      const heading = {
+        text: caption,
         style: 'sectionHeading',
-        tocItem: true,
-        tocStyle: { bold: true },
-        margin: [0, i === 0 ? 0 : 16, 0, 12],
-      } as unknown as Content);
+      } as Content;
+
+      drafts.push({
+        measured: { height, marginTop: 24, divider: 0, isSection: true },
+        render: (placed) =>
+          placed.firstOnPage
+            ? ({
+                ...(heading as object),
+                pageBreak: placed.pageBreakBefore ? 'before' : undefined,
+                margin: [0, 0, 0, 12],
+              } as unknown as Content)
+            : {
+                stack: [
+                  {
+                    canvas: [
+                      { type: 'line', x1: 0, y1: 0, x2: contentWidth, y2: 0, lineWidth: 2, lineColor: ACCENT },
+                    ],
+                  },
+                  { ...(heading as object), margin: [0, 14, 0, 12] } as unknown as Content,
+                ],
+                unbreakable: true,
+                margin: [0, 24, 0, 0],
+              },
+      });
       continue;
     }
 
-    if (step.kind === 'note') {
+    if (step.kind === 'note' || step.kind === 'rule') {
       if (!step.description?.trim()) continue;
-      stepContent.push({
+      const isNote = step.kind === 'note';
+      const label = isNote ? 'Nota   ' : 'Regla   ';
+      // La celda lleva 12 pt de margen a cada lado.
+      const height = 10 + textHeight(label + step.description, 11, contentWidth - 24) + 10;
+      const body: Content = {
         table: {
           widths: ['*'],
           body: [
             [
               {
                 text: [
-                  { text: 'Nota   ', bold: true, color: ACCENT },
-                  { text: step.description, color: '#92400e' },
+                  { text: label, bold: true, color: isNote ? ACCENT : '#1d4ed8' },
+                  { text: step.description, color: isNote ? '#92400e' : '#1e3a8a' },
                 ],
                 margin: [12, 10, 12, 10],
               },
             ],
           ],
         },
-        layout: { defaultBorder: false, fillColor: () => '#fffbeb' },
-        margin: [0, i === 0 ? 0 : 6, 0, 0],
-      } as Content);
-      addDivider(stepContent, steps, i, contentWidth);
+        layout: { defaultBorder: false, fillColor: () => (isNote ? '#fffbeb' : '#eff6ff') },
+      };
+
+      drafts.push({
+        measured: { height, marginTop: 6, divider: DIVIDER_H },
+        render: (placed) => ({
+          stack: placed.showDivider ? [body, divider(contentWidth)] : [body],
+          unbreakable: placed.unbreakable,
+          pageBreak: placed.pageBreakBefore ? 'before' : undefined,
+          margin: [0, placed.firstOnPage ? 0 : 6, 0, 0],
+        }),
+      });
       continue;
     }
 
-    if (step.kind === 'rule') {
-      if (!step.description?.trim()) continue;
-      stepContent.push({
-        table: {
-          widths: ['*'],
-          body: [
-            [
-              {
-                text: [
-                  { text: 'Regla   ', bold: true, color: '#1d4ed8' },
-                  { text: step.description, color: '#1e3a8a' },
-                ],
-                margin: [12, 10, 12, 10],
-              },
-            ],
-          ],
-        },
-        layout: { defaultBorder: false, fillColor: () => '#eff6ff' },
-        margin: [0, i === 0 ? 0 : 6, 0, 0],
-      } as Content);
-      addDivider(stepContent, steps, i, contentWidth);
-      continue;
-    }
-
-    // Acción (con imagen)
-    actionNo += 1;
+    // Acción (con imagen). El número solo se consume si el paso llega al PDF,
+    // para no dejar huecos ("Paso 1, Paso 3") ni divergir de HTML/Markdown.
     const img = step.annotated ?? step.screenshot;
     if (!img || !step.width || !step.height) continue;
-    const dataUrl = await exportImageDataUrl(img, quality);
-    const [w, h] = imageFit(step.width, step.height, contentWidth);
+    actionNo += 1;
+    const dataUrl = await resolveImageSrc(img, quality);
+    if (!dataUrl) continue;
+    const [w, h] = imageFit(step.width, step.height, contentWidth, maxImgHeight);
 
+    const headingText = `Paso ${actionNo}   ${step.caption}`;
     const heading = {
       text: [
         { text: `Paso ${actionNo}`, color: ACCENT, bold: true },
         { text: `   ${step.caption}`, color: '#111827', bold: true },
       ],
       style: 'stepHeading',
-      tocItem: true,
-      tocStyle: { fontSize: 11 },
       margin: [0, 0, 0, 10],
-    } as unknown as Content;
+    } as Content;
 
-    const block: Content[] = [heading, { image: dataUrl, width: w, height: h, alignment: 'center' }];
-    if (step.description?.trim()) {
-      block.push({ text: step.description, style: 'stepDesc', margin: [0, 10, 0, 0] });
-    }
+    const headingH = textHeight(headingText, 15, contentWidth) + 10;
+    const descH = step.description?.trim()
+      ? 10 + textHeight(step.description, 11, contentWidth, 1.4)
+      : 0;
 
-    // Cada paso se mantiene junto y no se parte entre páginas.
-    stepContent.push({ stack: block, unbreakable: true, margin: [0, i === 0 ? 0 : 6, 0, 0] });
+    drafts.push({
+      measured: {
+        height: headingH + h + IMG_FRAME_CHROME + descH,
+        marginTop: 6,
+        divider: DIVIDER_H,
+        imageHeight: h,
+      },
+      render: (placed) => {
+        const block: Content[] = [
+          heading,
+          framedImage(dataUrl, w * placed.imageScale, h * placed.imageScale),
+        ];
+        if (step.description?.trim()) {
+          block.push({ text: step.description, style: 'stepDesc', margin: [0, 10, 0, 0] });
+        }
+        if (placed.showDivider) block.push(divider(contentWidth));
+        return {
+          stack: block,
+          unbreakable: placed.unbreakable,
+          pageBreak: placed.pageBreakBefore ? 'before' : undefined,
+          margin: [0, placed.firstOnPage ? 0 : 6, 0, 0],
+        };
+      },
+    });
 
     // Caminos alternativos (variantes), cada uno como bloque indentado.
     let vi = 0;
     for (const v of step.variants ?? []) {
       vi += 1;
       const label = v.label || `Opción ${vi}`;
-      const vBlock: Content[] = [{ text: label, bold: true, color: ACCENT, margin: [0, 0, 0, 6] }];
+      const vWidth = contentWidth - 16;
       const vImg = v.annotated ?? v.screenshot;
-      if (vImg && v.width && v.height) {
-        const vUrl = await exportImageDataUrl(vImg, quality);
-        const [vw, vh] = imageFit(v.width, v.height, contentWidth - 16);
-        vBlock.push({ image: vUrl, width: vw, height: vh, alignment: 'center' });
-      }
-      if (v.description?.trim()) {
-        vBlock.push({ text: v.description, style: 'stepDesc', margin: [0, 8, 0, 0] });
-      }
-      stepContent.push({ stack: vBlock, unbreakable: true, margin: [16, 8, 0, 0] });
-    }
+      const vUrl = await resolveImageSrc(vImg, quality);
+      const [vw, vh] =
+        vUrl && v.width && v.height ? imageFit(v.width, v.height, vWidth, maxImgHeight) : [0, 0];
+      const vDescH = v.description?.trim() ? 8 + textHeight(v.description, 11, vWidth, 1.4) : 0;
+      const vLabelH = textHeight(label, 11, vWidth) + 6;
+      const vFrame = vUrl && vh > 0 ? IMG_FRAME_CHROME : 0;
 
-    addDivider(stepContent, steps, i, contentWidth);
+      drafts.push({
+        measured: {
+          height: vLabelH + vh + vFrame + vDescH,
+          marginTop: 8,
+          divider: DIVIDER_H,
+          imageHeight: vh || undefined,
+        },
+        render: (placed) => {
+          const vBlock: Content[] = [{ text: label, bold: true, color: ACCENT, margin: [0, 0, 0, 6] }];
+          if (vUrl && vh > 0) {
+            vBlock.push(framedImage(vUrl, vw * placed.imageScale, vh * placed.imageScale));
+          }
+          if (v.description?.trim()) {
+            vBlock.push({ text: v.description, style: 'stepDesc', margin: [0, 8, 0, 0] });
+          }
+          if (placed.showDivider) vBlock.push(divider(contentWidth - 16));
+          return {
+            stack: vBlock,
+            unbreakable: placed.unbreakable,
+            pageBreak: placed.pageBreakBefore ? 'before' : undefined,
+            margin: [16, placed.firstOnPage ? 0 : 8, 0, 0],
+          };
+        },
+      });
+    }
   }
+
+  // Un bloque pierde el divisor si es el último del documento o si le sigue un
+  // encabezado de sección, que ya separa de sobra por sí mismo. El divisor del
+  // último bloque de cada página lo quita `packBlocks`.
+  for (let i = 0; i < drafts.length; i++) {
+    const next = drafts[i + 1];
+    if (next && !next.measured.isSection) continue;
+    drafts[i].measured = { ...drafts[i].measured, divider: 0 };
+  }
+
+  // --- Pasos: segunda pasada, colocar ---
+  const placements = packBlocks(
+    drafts.map((d) => d.measured),
+    usableHeight,
+  );
+  const stepContent = drafts.map((d, i) => d.render(placements[i]));
+
+  // Marca del documento: usamos los datos del manual para que en "Propiedades
+  // del documento" aparezca la marca del cliente y no rastro de la herramienta.
+  const brand = manual.company || manual.author || manual.title;
+  const keywords = [manual.title, manual.company, manual.version, 'manual de usuario']
+    .filter(Boolean)
+    .join(', ');
 
   const doc: TDocumentDefinitions = {
     pageSize,
     pageMargins: [MARGIN_X, 64, MARGIN_X, 56],
+    info: {
+      title: manual.title,
+      author: manual.author || manual.company || brand,
+      subject: manual.subtitle || 'Manual de usuario',
+      keywords,
+      creator: brand,
+      producer: brand,
+    },
     content: [...cover, toc, ...stepContent],
     styles: {
       coverTitle: { fontSize: 32, bold: true, margin: [0, 0, 0, 8] },
@@ -252,7 +468,7 @@ export async function exportPdf(
             margin: [MARGIN_X, 28, MARGIN_X, 0],
             columns: [
               { text: manual.title, color: '#9ca3af', fontSize: 9 },
-              { text: 'ManualLite', color: '#d1d5db', fontSize: 9, alignment: 'right' },
+              { text: manual.company ?? '', color: '#d1d5db', fontSize: 9, alignment: 'right' },
             ],
           }
         : '',
@@ -278,5 +494,5 @@ export async function exportPdf(
         : '',
   };
 
-  pdfMake.createPdf(doc).download(`${safeName(manual.title)}.pdf`);
+  return doc;
 }

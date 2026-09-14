@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import type { Manual, Step } from '../../types';
 import { downloadBlob, safeName } from '../blob';
 import { imageExt, reencode, type ImageQuality } from '../image';
+import { buildTocEntries, tocLine } from './toc';
 
 /**
  * Genera un .md con las imágenes referenciadas en una carpeta `images/`,
@@ -38,15 +39,14 @@ export async function exportMarkdown(
   lines.push(`> ${meta.join(' · ')}`, '');
   if (manual.confidentiality) lines.push(`> **${manual.confidentiality.toUpperCase()}**`, '');
 
-  // Índice
+  // Índice persistente (mismo criterio que HTML/PDF)
   lines.push('## Índice', '');
-  let n = 0;
-  steps.forEach((s) => {
-    if (s.kind === 'section') {
-      lines.push(`- **${s.caption}**`);
-    } else if (s.kind === 'action') {
-      n += 1;
-      lines.push(`${n}. [Paso ${n}. ${s.caption}](#paso-${n}-${slug(s.caption)})`);
+  buildTocEntries(steps).forEach((entry, i) => {
+    const line = tocLine(entry);
+    if (entry.kind === 'section') {
+      lines.push(`${i + 1}. **${line}**`);
+    } else {
+      lines.push(`${i + 1}. [${line}](#paso-${entry.actionNo}-${slug(entry.caption)})`);
     }
   });
   lines.push('');

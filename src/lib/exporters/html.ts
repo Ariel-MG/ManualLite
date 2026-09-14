@@ -2,6 +2,7 @@ import type { Manual, Step } from '../../types';
 import { DEFAULT_ACCENT } from '../../types';
 import { blobToDataURL, downloadBlob, safeName } from '../blob';
 import { exportImageDataUrl, type ImageQuality } from '../image';
+import { tocLine } from './toc';
 
 function esc(s: string): string {
   return s
@@ -40,7 +41,9 @@ export async function exportHtml(
     const anchor = `step-${i + 1}`;
 
     if (s.kind === 'section') {
-      tocItems.push(`<li class="toc-section"><a href="#${anchor}">${esc(s.caption)}</a></li>`);
+      tocItems.push(
+        `<li class="toc-section"><a href="#${anchor}">${esc(tocLine({ kind: 'section', caption: s.caption }))}</a></li>`,
+      );
       bodyParts.push(`<h2 class="section" id="${anchor}">${esc(s.caption)}</h2>`);
       continue;
     }
@@ -63,7 +66,9 @@ export async function exportHtml(
     if (!img) continue;
     actionNo += 1;
     const dataUrl = await exportImageDataUrl(img, quality);
-    tocItems.push(`<li><a href="#${anchor}">Paso ${actionNo}. ${esc(s.caption)}</a></li>`);
+    tocItems.push(
+      `<li><a href="#${anchor}">${esc(tocLine({ kind: 'action', actionNo, caption: s.caption }))}</a></li>`,
+    );
 
     // Caminos alternativos (variantes) del paso.
     let variantsHtml = '';
