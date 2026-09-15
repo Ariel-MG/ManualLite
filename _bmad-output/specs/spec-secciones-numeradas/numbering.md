@@ -6,7 +6,7 @@ Los cuatro exporters (PDF, HTML, Markdown, índice) aplican estas reglas igual.
 
 - Sección *N*: `N. {título}` — ejemplo: `1. Generar factura`
 - Paso *M* de esa sección: `N.M. {título}` — ejemplo: `1.1. Abrir Facturas`
-- El número de paso se reinicia en cada sección (`1.1`, `1.2`, luego `2.1`).
+- El número del paso hereda el de su sección más su posición dentro de ella (sección 2, primer paso → `2.1.`). No es un contador que se resetea.
 - La palabra "Paso" no se usa.
 - No hay tercer nivel (`1.2.1`) ni sub-sección.
 
@@ -27,5 +27,6 @@ Los cuatro exporters (PDF, HTML, Markdown, índice) aplican estas reglas igual.
 - Si el manual tiene al menos una sección, toda acción debe quedar bajo una.
 - Acciones antes de la primera sección son error de autoría, no un caso soportado.
 - El exporter no inventa numeración para ellas (ni sección implícita, ni `0.1`, ni `Paso N` mezclado).
-- El export falla o avisa con el mensaje: `hay pasos fuera de toda sección`.
-- El autor las acomoda en el editor.
+- El export falla con el mensaje `hay pasos fuera de toda sección` y no produce archivo.
+- Notas y reglas antes de la primera sección no disparan el error: nunca se numeran. Solo las acciones cuentan como huérfanas.
+- El autor acomoda las acciones en el editor.

@@ -36,8 +36,9 @@ No hay sección implícita.
   sin migración manual.
 - El PDF sigue saliendo solo por export-pdf.ts.
 - Si un manual con secciones tiene acciones antes de la primera,
-  el export falla o avisa con el mensaje "hay pasos fuera de toda
-  sección". El autor las acomoda en el editor.
+  el export falla con el mensaje "hay pasos fuera de toda
+  sección" y no produce archivo. El autor las acomoda en el editor.
+  Notas y reglas antes de la primera sección no disparan el error.
 
 ## Nunca
 - No se toca pdfLayout.ts. La paginación no cambia.
@@ -66,5 +67,5 @@ No hay sección implícita.
   jerárquico.
 - PROFUNDIDAD: dos niveles fijos (sección.paso). No hay sub-secciones.
 - PASOS ANTES DE LA PRIMERA SECCIÓN: error de autoría. El exporter
-  no inventa numeración; falla o avisa ("hay pasos fuera de toda
-  sección").
+  no inventa numeración; falla sin producir archivo ("hay pasos
+  fuera de toda sección"). Notas y reglas no disparan el error.

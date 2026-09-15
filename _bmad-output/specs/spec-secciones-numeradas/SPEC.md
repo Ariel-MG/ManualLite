@@ -30,7 +30,7 @@ Dolor: las actas de entrega de Odoo agrupan varios procedimientos de un mismo m�
 
 - **CAP-4**
   - **intent:** El autor se entera si dej처 acciones fuera de toda secci처n, en vez de que el export las numere en silencio.
-  - **success:** Un manual con al menos un `kind: section` y acciones antes de la primera secci처n no inventa numeraci처n; el export falla o avisa con el mensaje `hay pasos fuera de toda secci처n`. El autor las acomoda en el editor.
+  - **success:** Un manual con al menos un `kind: section` y acciones antes de la primera secci처n no inventa numeraci처n; el export falla con el mensaje `hay pasos fuera de toda secci처n` y no produce archivo. El autor las acomoda en el editor. Notas y reglas antes de la primera secci처n no disparan el error.
 
 ## Constraints
 
