@@ -1,42 +1,50 @@
-# Epic 1 Context: El mismo manual, sin duplicar formato ni anillo
+# Epic 1 Context: El lector distingue procedimientos en el acta
 
 <!-- Compiled from planning artifacts. Edit freely. Regenerate with compile-epic-context if planning docs change. -->
 
 ## Goal
 
-Quien graba y quien lee/corrige por el MCP usan la misma definición de `.manuallite.json`. El anillo de click se define una vez; cada frente solo obtiene su canvas. Un archivo ya entregado sigue abriendo y exportando. Este corte cubre solo el núcleo compartido: no añade tools de creación ni biblioteca/procedencia.
+Un acta de módulo con varios procedimientos deja de leerse como una lista plana de clicks. Tras este epic, un manual con `kind: section` exporta cuerpo `N.` / `N.M.`, índice solo con esas secciones, y si hay acciones antes de la primera sección el export falla sin producir archivo. Un manual sin secciones sigue saliendo `Paso N. título`. El lector ve dónde empieza y termina cada procedimiento; el autor no manda al cliente un PDF numerado en silencio.
 
 ## Stories
 
-- Story 1.1: Superficie Node-safe de parse y serialize
-- Story 1.2: El MCP importa el núcleo y deja el espejo
-- Story 1.3: Geometría del anillo en la extensión
-- Story 1.4: Backend de anillo del MCP con napi-rs
+- Story 1.1: Numeración jerárquica en cuerpo e índice
+- Story 1.2: El export falla si hay acciones fuera de toda sección
 
 ## Requirements & Constraints
 
-- Parse y serialize de `ProjectFile` viven en una superficie Node-safe en `src/lib`. Esa superficie no importa IndexedDB, `downloadBlob`, `File`, `OffscreenCanvas` ni `createImageBitmap`. Download e import hacia IndexedDB permanecen en la extensión.
-- El MCP valida, lee y escribe `.manuallite.json` importando esa superficie. En el servidor no queda ninguna definición espejo de `ProjectFile`.
-- `formatVersion` permanece en 1. Un archivo ya entregado parsea y serializa sin migración. El round-trip conserva `app`, `formatVersion`, metadatos de portada, pasos e imágenes.
-- Grabar, pausar, editar y exportar PDF/HTML/Markdown/JSON se comportan igual. El pipeline de captura del side panel no cambia.
-- Las tools de revisión (`list_manuals`, `load_manual`, `get_step_image`, `write_corrected_manual`) siguen sirviendo. Una corrección de texto no altera las imágenes.
-- El PDF headless sale solo por `scripts/export-pdf.ts`. No se toca `pdfLayout.ts`. No se rediseña el editor.
-- Paridad de anotación extensión ↔ MCP: visual, no byte a byte. Prohibidos tests golden de PNG idéntico del anillo.
-- El núcleo es la única definición del formato. Ningún frente duplica lógica de pasos ni de exportación.
-- Fuera de este corte: tools MCP de crear/anotar/persistir un manual, y biblioteca en disco / procedencia. No se publica el núcleo como paquete npm.
+Con al menos un `kind: section`, el cuerpo muestra cada sección como `N. {título}` y cada acción como `N.M. {título}` (punto tras el número en ambos niveles). La palabra "Paso" no aparece. El número del paso hereda el de su sección más su posición dentro de ella (sección 2, primer paso → `2.1.`); no es un contador global ni un `1.1.` que se reinicia como si no hubiera sección. Dos niveles fijos: no hay `1.2.1` ni sub-sección.
+
+El índice del mismo export lista solo las secciones, ya numeradas. No incluye líneas de paso. No es expandible ni multinivel.
+
+Notas y reglas nunca se numeran.
+
+Si el manual tiene al menos una sección y hay acciones antes de la primera, el export (PDF, HTML o Markdown) falla con el mensaje exacto `hay pasos fuera de toda sección` y no produce archivo. No inventa numeración (ni sección implícita, ni `0.1.`, ni `Paso N` mezclado). Notas y reglas antes de la primera sección no disparan el error: solo las acciones cuentan como huérfanas. El autor las acomoda en el editor existente.
+
+Si el JSON no tiene ningún `kind: section`, cuerpo e índice conservan `Paso N. título`. No se inventa una sección 1 y el archivo no se reescribe. Eso no es error de autoría.
+
+Los cuatro exporters (PDF, HTML, Markdown, índice) emiten la misma numeración. El PDF sale solo por `scripts/export-pdf.ts`. No se toca `src/lib/exporters/pdfLayout.ts`: la paginación no cambia y no hay página separadora por sección; el corte visual es la jerarquía numérica.
+
+No se rediseña el editor. No se toca el pipeline de captura ni `paintClickRing`. No se toca `ProjectFile` ni se añade un campo obligatorio de número: la numeración se deriva al exportar. Los `.manuallite.json` ya entregados abren y exportan sin migración manual.
+
+El entregado `crear-factura-cliente.manuallite.json` tiene 4 `kind: section`; no es el fixture del modo plano. Su PDF entregado cambiará de `Paso N.` a `N.` / `N.M.` (CAP-1). El golden del modo plano (CAP-3 / NFR7) es el PDF generado del `.crudo` antes de cambiar exporters: `tests/goldens/crear-factura-cliente.crudo.golden.pdf` (salvo `CreationDate` e `/ID`).
+
+Fuera de alcance: partir un manual en varios PDF; numeración configurable (reiniciar vs continua); reordenar o mover secciones desde el editor; índice con pasos, expandible o multinivel; representar en el documento las agrupaciones del catálogo de Contabilidad ("Día a día", "Cierre", "Config (anexo)") como tercer nivel.
 
 ## Technical Decisions
 
-- Brownfield: partir el módulo que hoy mezcla esquema con download/import-a-IDB. Parse/serialize van al núcleo; I/O de navegador se queda en la extensión. No hace falta un workspace `packages/core` si `src/lib` Node-safe basta para que el MCP importe.
-- Extensión, MCP y `scripts/export-pdf.ts` importan el núcleo. El archivo que el MCP lee/escribe es el mismo `ProjectFile` que exporta la extensión.
-- Geometría del anillo: una función que recibe `CanvasRenderingContext2D` y concentra radios, halo, trazos y colores. No se reimplementa el anillo en el MCP ni se copia el anotador entero.
-- Extensión: obtiene el contexto 2D con `OffscreenCanvas` + `createImageBitmap` y llama esa función. Esas APIs no entran al núcleo. El `package.json` de la extensión no depende de `@napi-rs/canvas`.
-- MCP: contexto 2D con `@napi-rs/canvas` 1.0.9 (`createCanvas` / `loadImage`), verificado en Bun con `bun run`. No se polyfillean `OffscreenCanvas`, `createImageBitmap` ni `ImageBitmap`. `Bun.Image` no es backend de dibujo.
-- Paridad aceptada: media ≈ 0.71/canal en la caja del halo (antialias Skia vs Chrome); línea central del anillo `#dc2626` idéntica.
+El agrupador ya existe como `kind: section` en el JSON. Este corte numera lo que hay; no introduce un tipo nuevo ni un árbol.
+
+Hay dos modos, no un híbrido: con secciones, jerarquía `N.` / `N.M.` sin "Paso"; sin secciones, formato plano actual. La presencia de `kind: section` decide el modo.
+
+Las reglas de numeración son un contrato único para los cuatro exporters. Se aplican al exportar, no se persisten en el archivo.
+
+Pasos antes de la primera sección son error de autoría, no un caso soportado. Fallar cerrado: mensaje fijo, sin archivo, sin numeración inventada.
+
+CAP-3 (manuales sin secciones) no es un epic aparte: es garantía de no regresión en las stories de este epic.
 
 ## Cross-Story Dependencies
 
-- 1.2 requiere la superficie de parse/serialize de 1.1.
-- 1.4 requiere la función de geometría de 1.3.
-- 1.4 deja el backend de anillo listo; no añade las tools de creación.
-- Toda story que toque parse/serialize o el camino de abrir/exportar debe verificar round-trip de un `.manuallite.json` ya entregado.
+1.2 asume que un manual bien formado (todas las acciones bajo una sección) conserva la numeración de 1.1 y no falla.
+
+Ambas stories deben preservar el modo plano en el `.crudo` (golden) y aplicar jerarquía al `.manuallite.json` entregado. El fallo de autoría solo aplica cuando ya hay al menos una sección.
