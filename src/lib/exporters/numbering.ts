@@ -51,7 +51,7 @@ function isAuthorshipAction(step: NumberableStep): boolean {
   return step.kind !== 'section' && step.kind !== 'note' && step.kind !== 'rule';
 }
 
-const ORPHAN_STEPS_MESSAGE = 'hay pasos fuera de toda sección';
+export const ORPHAN_STEPS_MESSAGE = 'hay pasos fuera de toda sección';
 
 /**
  * Recorre el array plano y asigna etiquetas de sección/acción.

@@ -13,3 +13,4 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-2-export-falla-acciones-fuera-seccion.md`
   summary: El CLI `scripts/export-pdf.ts` imprime stack de Bun además del mensaje `hay pasos fuera de toda sección`.
   evidence: `buildPdfDoc` no está en try/catch (el parse sí). El throw es de esta story; el mensaje sale y no hay archivo. Envolverlo igualaría el UX del parse error.
+  status: done 2026-09-15

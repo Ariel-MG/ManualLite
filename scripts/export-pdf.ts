@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 import pdfMake from 'pdfmake/build/pdfmake';
 import { parseProjectFile } from '../src/lib/projectFile';
 import { buildPdfDoc } from '../src/lib/exporters/pdf';
+import { ORPHAN_STEPS_MESSAGE } from '../src/lib/exporters/numbering';
 import { safeName } from '../src/lib/blob';
 
 // Las fuentes las asigna `pdf.ts` al importar; aquí no se toca el VFS.
@@ -41,7 +42,17 @@ const manual = {
   logo: project.manual.logo,
 };
 
-const doc = await buildPdfDoc(manual, project.steps, 'png');
+let doc;
+try {
+  doc = await buildPdfDoc(manual, project.steps, 'png');
+} catch (err) {
+  const msg = (err as Error).message ?? '';
+  if (msg === ORPHAN_STEPS_MESSAGE) {
+    console.error(msg);
+    process.exit(1);
+  }
+  throw err;
+}
 const out =
   process.argv[3] ??
   resolve(input.replace(/\.manuallite\.json$/i, '.pdf') || `${safeName(manual.title)}.pdf`);

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
+import { existsSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -167,6 +168,27 @@ describe('scripts/export-pdf.ts', () => {
 
     expect(exitCode).not.toBe(0);
     expect(stderr).toContain('El archivo no es un proyecto válido de ManualLite.');
+  });
+
+  it('pasos huérfanos: mensaje limpio, sin stack, y no escribe PDF', async () => {
+    const dir = await tempDir();
+    const filePath = path.join(dir, 'huerfana.manuallite.json');
+    const outPath = path.join(dir, 'no-debe-existir.pdf');
+    await writeFile(filePath, JSON.stringify(fixture()), 'utf8');
+
+    const repoRoot = path.resolve(import.meta.dir, '../..');
+    const proc = Bun.spawn({
+      cmd: ['bun', 'run', 'scripts/export-pdf.ts', filePath, outPath],
+      cwd: repoRoot,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [exitCode, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
+
+    expect(exitCode).toBe(1);
+    expect(stderr.trim()).toBe('hay pasos fuera de toda sección');
+    expect(stderr).not.toMatch(/\bat\s/);
+    expect(existsSync(outPath)).toBe(false);
   });
 });
 
