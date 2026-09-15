@@ -57,7 +57,7 @@ Dolor: ManualLite solo produce manuales por grabación humana, pero las actas de
 
 ## Non-goals
 
-- Agrupar varias secciones en un PDF o partir uno en varios (decisión de cliente abierta).
+- Partir un manual en varios PDF. Agrupar procedimientos de un módulo en un solo PDF queda en `spec-secciones-numeradas`; ya no es decisión abierta.
 - Nube, sincronización, multiusuario.
 - Publicación web o help center.
 - Traducción de manuales.

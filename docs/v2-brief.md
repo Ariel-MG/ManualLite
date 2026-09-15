@@ -39,8 +39,9 @@ Un manual hecho por agente y uno grabado a mano son el mismo objeto.
   panel.
 
 ## Fuera de alcance
-- Agrupar varias secciones en un PDF o partir uno en varios.
-  Depende de una decisión de cliente que sigue abierta.
+- Partir un manual en varios PDF. Agrupar procedimientos de un
+  módulo en un solo PDF queda en spec-secciones-numeradas; ya no
+  es decisión abierta.
 - Nube, sincronización, multiusuario.
 - Publicación web o help center.
 - Traducción de manuales.
