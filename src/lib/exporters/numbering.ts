@@ -22,7 +22,6 @@ export interface NumberedHeading {
   /**
    * Jerárquico: `1.` / `1.1.`.
    * Plano: `Paso 1` (sin punto; el PDF del modo plano lo dibuja así).
-   * Huérfana (story 1.1): cadena vacía — ni `0.1.` ni `Paso N`.
    */
   token: string;
   caption: string;
@@ -47,9 +46,18 @@ function isNumerableAction(step: NumberableStep, requireSize?: boolean): boolean
   return true;
 }
 
+/** Acción de autoría: no es agrupador ni nota/regla. Independiente de imagen y tamaño. */
+function isAuthorshipAction(step: NumberableStep): boolean {
+  return step.kind !== 'section' && step.kind !== 'note' && step.kind !== 'rule';
+}
+
+const ORPHAN_STEPS_MESSAGE = 'hay pasos fuera de toda sección';
+
 /**
  * Recorre el array plano y asigna etiquetas de sección/acción.
  * Presencia de al menos un `kind: section` decide el modo.
+ * En modo jerárquico, acciones antes de la primera sección lanzan
+ * `hay pasos fuera de toda sección` y no hay numeración de retorno.
  */
 export function numberSteps(steps: NumberableStep[], opts: NumberingOptions = {}): Numbering {
   const hierarchical = steps.some((s) => s.kind === 'section');
@@ -73,14 +81,17 @@ export function numberSteps(steps: NumberableStep[], opts: NumberingOptions = {}
     return { hierarchical: false, at };
   }
 
+  const firstSection = steps.findIndex((s) => s.kind === 'section');
+  if (steps.slice(0, firstSection).some(isAuthorshipAction)) {
+    throw new Error(ORPHAN_STEPS_MESSAGE);
+  }
+
   let sectionNo = 0;
   let actionInSection = 0;
-  let inSection = false;
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     if (step.kind === 'section') {
-      inSection = true;
       sectionNo += 1;
       actionInSection = 0;
       const caption = step.caption || 'Sección';
@@ -97,16 +108,6 @@ export function numberSteps(steps: NumberableStep[], opts: NumberingOptions = {}
     if (!isNumerableAction(step, opts.requireSize)) continue;
 
     const caption = step.caption ?? '';
-    if (!inSection) {
-      at[i] = {
-        kind: 'action',
-        token: '',
-        caption,
-        label: caption,
-      };
-      continue;
-    }
-
     actionInSection += 1;
     at[i] = {
       kind: 'action',

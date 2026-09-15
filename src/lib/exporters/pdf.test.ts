@@ -96,4 +96,11 @@ describe('buildPdfDoc', () => {
     expect(headings[0]?.rest).toBe('   uno');
     expect(headings[0]?.token.endsWith('.')).toBe(false);
   });
+
+  it('no arma documento si hay acciones antes de la primera sección', async () => {
+    const steps = [action('huérfana', 0), section('Uno', 1), action('dentro', 2)];
+    await expect(buildPdfDoc(manual(), steps, 'png')).rejects.toThrow(
+      /^hay pasos fuera de toda sección$/,
+    );
+  });
 });

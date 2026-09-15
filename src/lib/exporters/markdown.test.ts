@@ -72,4 +72,12 @@ describe('exportMarkdown — jerárquico', () => {
     expect(md).not.toContain('1. **1. Alfa**');
     expect(md).toContain('## 1.1. A1');
   });
+
+  it('no produce archivo si hay acciones antes de la primera sección', async () => {
+    const steps = [action('huérfana', 0), section('Uno', 1), action('dentro', 2)];
+    await expect(exportMarkdown(manual(), steps, 'png')).rejects.toThrow(
+      /^hay pasos fuera de toda sección$/,
+    );
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
 });

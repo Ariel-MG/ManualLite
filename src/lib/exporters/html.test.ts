@@ -75,4 +75,12 @@ describe('exportHtml — jerárquico', () => {
 
     expect(html).toContain('<span class="num compound">1.1.</span>');
   });
+
+  it('no produce archivo si hay acciones antes de la primera sección', async () => {
+    const steps = [action('huérfana', 0), section('Uno', 1), action('dentro', 2)];
+    await expect(exportHtml(manual(), steps, 'png')).rejects.toThrow(
+      /^hay pasos fuera de toda sección$/,
+    );
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
 });

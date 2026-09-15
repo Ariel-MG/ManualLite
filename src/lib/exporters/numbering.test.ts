@@ -105,14 +105,26 @@ describe('numberSteps — jerárquico', () => {
     expect(labels(steps)).toEqual(['1. Uno', '1.1. ok', '1.2. sin tamaño', '1.3. también ok']);
   });
 
-  it('acciones antes de la primera sección no inventan 0.1. ni mezclan Paso N', () => {
+  it('acciones antes de la primera sección fallan sin inventar 0.1. ni Paso N', () => {
     const steps = [action('huérfana'), note('antes'), section('Uno'), action('dentro')];
-    const numbered = numberSteps(steps);
-    expect(numbered.at[0]?.label).toBe('huérfana');
-    expect(numbered.at[0]?.token).toBe('');
-    expect(numbered.at[0]?.label).not.toMatch(/0\.1/);
-    expect(numbered.at[0]?.label).not.toMatch(/Paso /);
-    expect(numbered.at[3]?.label).toBe('1.1. dentro');
+    expect(() => numberSteps(steps)).toThrowError(/^hay pasos fuera de toda sección$/);
+  });
+
+  it('notas y reglas antes de la primera sección no disparan el error', () => {
+    const steps = [note('aviso'), rule('condicional'), section('Uno'), action('dentro')];
+    expect(labels(steps)).toEqual([undefined, undefined, '1. Uno', '1.1. dentro']);
+  });
+
+  it('acción sin imagen antes de la primera sección también es huérfana', () => {
+    const steps = [action('sin foto', { img: false }), section('Uno'), action('dentro')];
+    expect(() => numberSteps(steps)).toThrowError(/^hay pasos fuera de toda sección$/);
+  });
+
+  it('con requireSize, acción sin tamaño antes de la primera sección también falla', () => {
+    const steps = [action('sin tamaño'), section('Uno'), action('ok', { width: 10, height: 10 })];
+    expect(() => numberSteps(steps, { requireSize: true })).toThrowError(
+      /^hay pasos fuera de toda sección$/,
+    );
   });
 
   it('usa "Sección" si el caption de sección está vacío', () => {
@@ -169,5 +181,10 @@ describe('buildTocEntries — mismo walk que el cuerpo', () => {
     const entries = buildTocEntries(steps);
     expect(entries.map(tocLine)).toEqual(['Paso 1. uno', 'Paso 2. dos']);
     expect(entries.map((e) => e.kind)).toEqual(['action', 'action']);
+  });
+
+  it('con acción antes de la primera sección no produce índice', () => {
+    const steps = [action('huérfana'), section('Uno'), action('dentro')];
+    expect(() => buildTocEntries(steps)).toThrowError(/^hay pasos fuera de toda sección$/);
   });
 });

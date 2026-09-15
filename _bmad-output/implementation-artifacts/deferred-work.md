@@ -9,3 +9,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-1-numeracion-jerarquica-cuerpo-indice.md`
   summary: El círculo HTML del modo plano (`.num` 30px) puede recortar números de dos dígitos.
   evidence: Preexistente; esta story solo añade `.num.compound` para `N.M.`. Se vería en un manual plano con ≥10 acciones.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-2-export-falla-acciones-fuera-seccion.md`
+  summary: El CLI `scripts/export-pdf.ts` imprime stack de Bun además del mensaje `hay pasos fuera de toda sección`.
+  evidence: `buildPdfDoc` no está en try/catch (el parse sí). El throw es de esta story; el mensaje sale y no hay archivo. Envolverlo igualaría el UX del parse error.

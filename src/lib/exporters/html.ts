@@ -91,9 +91,7 @@ export async function exportHtml(
 
     const numClass = numbering.hierarchical ? 'num compound' : 'num';
     const numText = numbering.hierarchical ? numbered.token : String(numbered.actionNo ?? '');
-    const badge = numText
-      ? `<span class="${numClass}">${esc(numText)}</span> `
-      : '';
+    const badge = `<span class="${numClass}">${esc(numText)}</span> `;
     bodyParts.push(`
     <section class="step" id="${anchor}">
       <h2>${badge}${esc(s.caption)}</h2>
