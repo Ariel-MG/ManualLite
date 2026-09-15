@@ -67,5 +67,6 @@ bunx @modelcontextprotocol/inspector bun run src/index.ts
 ## Notas
 
 - Solo lee/escribe archivos en disco; no usa red ni credenciales.
-- El esquema del archivo (`src/schema.ts`) es un espejo de `src/lib/project.ts` de la extensión.
-  Si cambia el `formatVersion` del export, actualiza ambos.
+- El formato del archivo lo define el núcleo `src/lib/projectFile.ts` (el mismo que usa la extensión).
+  Carga, validación y guardado importan `src/lib/projectFile.ts` del árbol del repo; no basta copiar solo `mcp-server/`.
+  No hay un esquema espejo en el servidor.

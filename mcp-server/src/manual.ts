@@ -2,7 +2,11 @@
 
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { ProjectFileSchema, type ProjectFile } from './schema.js';
+import {
+  parseProjectFile,
+  serializeProjectFile,
+  type ProjectFile,
+} from '../../src/lib/projectFile.js';
 
 const SUFFIX = '.manuallite.json';
 
@@ -14,26 +18,19 @@ export async function loadProject(filePath: string): Promise<ProjectFile> {
   } catch {
     throw new Error(`No se pudo leer el archivo: ${filePath}`);
   }
-  let json: unknown;
   try {
-    json = JSON.parse(raw);
-  } catch {
-    throw new Error(`El archivo no es JSON válido: ${filePath}`);
+    return parseProjectFile(raw);
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      throw new Error(`El archivo no es JSON válido: ${filePath}`);
+    }
+    throw err;
   }
-  const parsed = ProjectFileSchema.safeParse(json);
-  if (!parsed.success) {
-    throw new Error(
-      `El archivo no es un proyecto válido de ManualLite: ${parsed.error.issues
-        .map((i) => `${i.path.join('.')}: ${i.message}`)
-        .join('; ')}`,
-    );
-  }
-  return parsed.data;
 }
 
 /** Escribe un proyecto a disco (JSON compacto, como el export de la extensión). */
 export async function saveProject(filePath: string, project: ProjectFile): Promise<void> {
-  await writeFile(filePath, JSON.stringify(project), 'utf8');
+  await writeFile(filePath, serializeProjectFile(project), 'utf8');
 }
 
 export interface ManualSummary {

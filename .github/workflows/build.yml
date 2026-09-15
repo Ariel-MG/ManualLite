@@ -27,6 +27,9 @@ jobs:
       - name: Test
         run: bun run test
 
+      - name: Test MCP
+        run: cd mcp-server && bun run test
+
       - name: Build
         run: bun run build
 

@@ -6,6 +6,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import pdfMake from 'pdfmake/build/pdfmake';
+import { parseProjectFile } from '../src/lib/projectFile';
 import { buildPdfDoc } from '../src/lib/exporters/pdf';
 import { safeName } from '../src/lib/blob';
 
@@ -17,9 +18,11 @@ if (!input) {
   process.exit(1);
 }
 
-const project = JSON.parse(readFileSync(resolve(input), 'utf8'));
-if (project.app !== 'ManualLite' || !Array.isArray(project.steps)) {
-  console.error('El archivo no es un proyecto ManualLite válido.');
+let project;
+try {
+  project = parseProjectFile(readFileSync(resolve(input), 'utf8'));
+} catch (err) {
+  console.error((err as Error).message);
   process.exit(1);
 }
 
