@@ -10,7 +10,7 @@
   "scripts": {
     "start": "bun run src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test src/manual.test.ts"
+    "test": "bun test src/manual.test.ts src/annotate.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
