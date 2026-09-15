@@ -1,4 +1,5 @@
 import type { ClickPoint } from '../types';
+import { paintClickRing } from './clickRing';
 
 export interface AnnotateResult {
   blob: Blob;
@@ -27,29 +28,13 @@ export async function annotateScreenshot(
   ctx.drawImage(bitmap, 0, 0);
   bitmap.close();
 
-  // Radio relativo al tamaño de la imagen, con límites razonables.
-  const radius = Math.max(16, Math.min(width, height) * 0.025);
-  const { x, y } = clickOnImage;
-
-  // Halo semitransparente
-  ctx.beginPath();
-  ctx.arc(x, y, radius * 1.9, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(220, 38, 38, 0.18)';
-  ctx.fill();
-
-  // Anillo hueco (solo contorno) para no tapar el elemento clickeado.
-  // Borde blanco exterior para contraste sobre fondos oscuros.
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.lineWidth = Math.max(5, radius * 0.28);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.lineWidth = Math.max(3, radius * 0.18);
-  ctx.strokeStyle = '#dc2626';
-  ctx.stroke();
+  paintClickRing(
+    ctx as unknown as CanvasRenderingContext2D,
+    clickOnImage.x,
+    clickOnImage.y,
+    width,
+    height,
+  );
 
   const blob = await canvas.convertToBlob({ type: 'image/png' });
   return { blob, width, height };
