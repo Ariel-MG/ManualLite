@@ -2,7 +2,7 @@ import type { Manual, Step } from '../../types';
 import { DEFAULT_ACCENT } from '../../types';
 import { blobToDataURL, downloadBlob, safeName } from '../blob';
 import { exportImageDataUrl, type ImageQuality } from '../image';
-import { tocLine } from './toc';
+import { numberSteps } from './numbering';
 
 function esc(s: string): string {
   return s
@@ -34,17 +34,19 @@ export async function exportHtml(
 
   const tocItems: string[] = [];
   const bodyParts: string[] = [];
-  let actionNo = 0;
+  const numbering = numberSteps(steps);
 
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
     const anchor = `step-${i + 1}`;
+    const numbered = numbering.at[i];
 
     if (s.kind === 'section') {
+      const label = numbered?.label ?? s.caption;
       tocItems.push(
-        `<li class="toc-section"><a href="#${anchor}">${esc(tocLine({ kind: 'section', caption: s.caption }))}</a></li>`,
+        `<li class="toc-section"><a href="#${anchor}">${esc(label)}</a></li>`,
       );
-      bodyParts.push(`<h2 class="section" id="${anchor}">${esc(s.caption)}</h2>`);
+      bodyParts.push(`<h2 class="section" id="${anchor}">${esc(label)}</h2>`);
       continue;
     }
     if (s.kind === 'note') {
@@ -63,12 +65,13 @@ export async function exportHtml(
     }
 
     const img = s.annotated ?? s.screenshot;
-    if (!img) continue;
-    actionNo += 1;
+    if (!img || !numbered) continue;
     const dataUrl = await exportImageDataUrl(img, quality);
-    tocItems.push(
-      `<li><a href="#${anchor}">${esc(tocLine({ kind: 'action', actionNo, caption: s.caption }))}</a></li>`,
-    );
+    if (!numbering.hierarchical) {
+      tocItems.push(
+        `<li><a href="#${anchor}">${esc(numbered.label)}</a></li>`,
+      );
+    }
 
     // Caminos alternativos (variantes) del paso.
     let variantsHtml = '';
@@ -86,9 +89,14 @@ export async function exportHtml(
       </div>`;
     }
 
+    const numClass = numbering.hierarchical ? 'num compound' : 'num';
+    const numText = numbering.hierarchical ? numbered.token : String(numbered.actionNo ?? '');
+    const badge = numText
+      ? `<span class="${numClass}">${esc(numText)}</span> `
+      : '';
     bodyParts.push(`
     <section class="step" id="${anchor}">
-      <h2><span class="num">${actionNo}</span> ${esc(s.caption)}</h2>
+      <h2>${badge}${esc(s.caption)}</h2>
       <img src="${dataUrl}" alt="${esc(s.caption)}" loading="lazy" />
       ${s.description ? `<p class="desc">${esc(s.description).replace(/\n/g, '<br />')}</p>` : ''}
       ${variantsHtml}
@@ -120,11 +128,13 @@ export async function exportHtml(
   .toc { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px 24px; margin: 0 0 40px; }
   .toc h2 { margin:0 0 12px; font-size:1.3rem; }
   .toc ol { margin:0; padding-left: 20px; line-height:1.9; }
+  .toc ul.toc-list { margin:0; padding-left: 0; list-style: none; line-height:1.9; }
   .toc a { color:#111827; text-decoration:none; }
   .toc a:hover { color: var(--accent); text-decoration: underline; }
   .step { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:22px; margin-bottom: 26px; scroll-margin-top: 20px; }
   .step h2 { display:flex; align-items:center; gap:12px; font-size:1.2rem; margin:0 0 16px; }
   .step .num { flex:none; width:30px; height:30px; border-radius:50%; background:var(--accent); color:#fff; display:grid; place-items:center; font-size:.95rem; }
+  .step .num.compound { width:auto; min-width:30px; padding:0 8px; border-radius:999px; font-size:.8rem; }
   .step img { width:100%; height:auto; border:1px solid #e5e7eb; border-radius:8px; display:block; }
   .step .desc { margin: 14px 0 0; color:#374151; line-height:1.6; font-size:.97rem; }
   h2.section { color:var(--accent); font-size:1.6rem; margin: 34px 0 8px; padding-bottom:8px; border-bottom:2px solid var(--accent); scroll-margin-top:20px; }
@@ -152,9 +162,7 @@ export async function exportHtml(
   <div class="wrap">
     <nav class="toc">
       <h2>Índice</h2>
-      <ol>
-        ${toc}
-      </ol>
+      ${numbering.hierarchical ? `<ul class="toc-list">\n        ${toc}\n      </ul>` : `<ol>\n        ${toc}\n      </ol>`}
     </nav>
     ${body}
   </div>

@@ -2,9 +2,10 @@
 title: 'Numeración jerárquica en cuerpo e índice'
 type: 'feature'
 created: '2026-09-15'
-status: 'ready-for-dev'
+status: 'done'
 route: 'dispatch'
 review_loop_iteration: 0
+baseline_commit: 'e168d96b5ea33c5507d66241f2bab55e096d68f0'
 context:
   - _bmad-output/implementation-artifacts/epic-1-context.md
   - _bmad-output/specs/spec-secciones-numeradas/numbering.md
@@ -62,13 +63,13 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/lib/exporters/numbering.ts` + `numbering.test.ts` -- Walk plano → `N.` / `N.M.` o `Paso N.`; notas no cuentan; herencia `2.1.` -- Un contrato, tests de la matriz
-- [ ] `src/lib/exporters/toc.ts` -- Índice: con secciones solo esas etiquetas; sin secciones `Paso N.` -- CAP-2 y CAP-3
-- [ ] `src/lib/exporters/pdf.ts` -- Headings e índice usan el helper; quitar prefijo `i+1.` -- Cuerpo PDF = contrato
-- [ ] `src/lib/exporters/html.ts` -- TOC y headings; badge no recorta `N.M.` -- Paridad de etiqueta
-- [ ] `src/lib/exporters/markdown.ts` -- Índice y headings sin doble numeración -- Paridad MD
-- [ ] `bun run scripts/export-pdf.ts` del `.crudo` vs `tests/goldens/crear-factura-cliente.crudo.golden.pdf` -- CAP-3 / NFR7 (salvo `CreationDate` e `/ID`)
-- [ ] Export del `.manuallite.json` entregado: índice y cuerpo `1.` / `1.1.` / `2.1.` -- CAP-1; no comparar contra `crear-factura-cliente.pdf.pdf`
+- [x] `src/lib/exporters/numbering.ts` + `numbering.test.ts` -- Walk plano → `N.` / `N.M.` o `Paso N.`; notas no cuentan; herencia `2.1.` -- Un contrato, tests de la matriz
+- [x] `src/lib/exporters/toc.ts` -- Índice: con secciones solo esas etiquetas; sin secciones `Paso N.` -- CAP-2 y CAP-3
+- [x] `src/lib/exporters/pdf.ts` -- Headings e índice usan el helper; quitar prefijo `i+1.` -- Cuerpo PDF = contrato
+- [x] `src/lib/exporters/html.ts` -- TOC y headings; badge no recorta `N.M.` -- Paridad de etiqueta
+- [x] `src/lib/exporters/markdown.ts` -- Índice y headings sin doble numeración -- Paridad MD
+- [x] `bun run scripts/export-pdf.ts` del `.crudo` vs `tests/goldens/crear-factura-cliente.crudo.golden.pdf` -- CAP-3 / NFR7 (salvo `CreationDate` e `/ID`)
+- [x] Export del `.manuallite.json` entregado: índice y cuerpo `1.` / `1.1.` / `2.1.` -- CAP-1; no comparar contra `crear-factura-cliente.pdf.pdf`
 
 **Acceptance Criteria:**
 - Given un manual con ≥3 secciones y acciones bajo cada una, when se exporta PDF/HTML/MD, then cuerpo `N.` / `N.M.` con punto, sin "Paso", y la primera acción de la sección 2 es `2.1.`
@@ -79,11 +80,34 @@ context:
 
 ## Implementation Notes
 
+- Helper `numberSteps` en `src/lib/exporters/numbering.ts`; PDF/HTML/MD/TOC consumen `at[i].label` / `token`.
+- PDF plano: `token` = `Paso N` sin punto + tres espacios (el golden no se mueve). Con secciones, heading = `N.` / `N.M.` y `textHeight` usa `label`.
+- Índice jerárquico: HTML `<ul class="toc-list">` (sin `<ol>` que recuente); MD `**label**` sin `i+1.`; PDF `tocLine` sin prefijo.
+- HTML jerárquico: badge `.num.compound` con `token` (`1.1.`), no círculo fijo 30px.
+- Golden `.crudo`: mismo tamaño; difiere `(D:…Z)` del obj 47 y `/ID`. Entregado: índice `1.`–`4.`; `2.1. Revisar el tablero`; notas sin número; sin "Paso".
+- Review patch: índice MD jerárquico `- **label**`; tests de `html.ts` / `markdown.ts` / `pdf.ts` (índice, badge `1.1.`, plano `Paso N` + espacios).
 ## Spec Change Log
 
 ## Review Triage Log
 
-## Design Notes
+- `false` — BH: HTML no llama `buildTocEntries`. El helper único es `numberSteps`; HTML ya lo usa para las mismas etiquetas. `buildTocEntries` es adaptador de índice, no el contrato.
+- `medium` — VG/BH: `exportHtml` no tiene test. Invertir el `if` de TOC de acciones reintroduce pasos en el índice y `numbering.test.ts` sigue verde. (`html.ts` 70–74, 165)
+- `medium` — VG/BH: `exportMarkdown` no tiene test. Quitar el branch jerárquico vuelve a `1. **1. Alfa**` sin fallar el helper. (`markdown.ts` 47–51, 83)
+- `medium` — VG: `tocContent`/`buildPdfDoc` no tienen test. Restaurar `` `${i+1}.  ${line}` `` o dibujar plano con `label` rompería CAP-2/CAP-3 sin fallar `numbering.test.ts`. (`pdf.ts` 116, 338–346)
+- `false` — BH: split `requireSize` PDF vs HTML. Es el criterio de hoy (Design Notes); el helper ya lo cubre en `numbering.test.ts`.
+- `medium` — BH: índice MD jerárquico son líneas `**label**` seguidas. En CommonMark/GFM se funden en un párrafo; el lector no ve un índice. (`markdown.ts` 49–51)
+- `false` — BH: golden no está en `vitest`. El JSON `.crudo` no vive en el repo; el spec lo pone en Manual checks y se verificó aparte.
+- `false` — BH: Change Log / Triage vacíos al pasar a `in-review`. Los llena este paso, no el producto.
+- `false` — BH: Code Map desactualizado. El arreglo sería editar el spec de este build; se rechaza.
+- `low` — BH: falta test de un solo `section` / huérfana en TOC / notas en TOC plano. El código ya hace lo correcto; se cubre al ampliar tests. Rechazado como defecto autónomo (se absorbe en los tests de exporters/helper).
+- `false` — BH: HTML acción no emite `numbered.label`. Design Notes: badge `token` + caption; es el chrome HTML, misma numeración.
+- `false` — BH: rama plana `entry.kind === 'section'` en MD. En plano no hay secciones; no hay fallo para el usuario.
+- `defer` — BH/EH: `numberSteps` corre antes de `resolveImageSrc`; si falla el dataUrl hay hueco. Ya ocurría: `actionNo += 1` antes del resolve. (`pdf.ts` 333–335)
+- `false` — EH: `steps` null/undefined. Los exporters siempre pasan el array del manual; un throw ahí es correcto.
+- `low` — EH: caption de sección solo espacios. `"   " || 'Sección'` no cae al default. Improbable en uso; el arreglo añade `trim`. Rechazado.
+- `defer` — EH: badge plano `.num` 30px recorta dos dígitos. Preexistente; esta story solo crece `.compound`.
+- `false` — EH: PDF plano omite el punto de `Paso N.`. Design Notes + golden: `token` + tres espacios, no `label`. CAP-3 es no mover ese PDF.
+- `false` — EH: TOC PDF plano sigue con `i+1.`. CAP-3 conserva el índice actual; el prefijo solo se quita en jerárquico.## Design Notes
 
 Helper sobre el array plano (delimitadores `section`). Acciones numerables = las de hoy (imagen; PDF también `width`/`height`). El índice muestra esa etiqueta, sin `i+1.` ni `<ol>` que recuente. HTML plano: círculo actual; con secciones el badge crece para `N.M.`. PDF plano: no cambiar `Paso N` sin punto; con secciones el heading y `textHeight` usan `N.` / `N.M.` (puede envolver; no se toca `pdfLayout.ts`).
 

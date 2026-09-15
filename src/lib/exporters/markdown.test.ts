@@ -1,0 +1,75 @@
+import JSZip from 'jszip';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Manual, Step } from '../../types';
+import { downloadBlob } from '../blob';
+import { exportMarkdown } from './markdown';
+
+vi.mock('../blob', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../blob')>();
+  return { ...actual, downloadBlob: vi.fn() };
+});
+
+vi.mock('../image', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../image')>();
+  return {
+    ...actual,
+    reencode: vi.fn(async (blob: Blob) => blob),
+  };
+});
+
+const PNG = new Blob(['png'], { type: 'image/png' });
+
+function manual(): Manual {
+  return { id: 'm', title: 'Test', createdAt: 0, updatedAt: 0 };
+}
+
+function section(caption: string, order: number): Step {
+  return { id: `sec-${order}`, manualId: 'm', order, kind: 'section', caption, createdAt: 0 };
+}
+
+function action(caption: string, order: number): Step {
+  return {
+    id: `act-${order}`,
+    manualId: 'm',
+    order,
+    kind: 'action',
+    caption,
+    screenshot: PNG,
+    createdAt: 0,
+  };
+}
+
+const THREE_SECTIONS: Step[] = [
+  section('Alfa', 0),
+  action('A1', 1),
+  action('A2', 2),
+  section('Beta', 3),
+  action('B1', 4),
+  section('Gamma', 5),
+  action('C1', 6),
+  action('C2', 7),
+];
+
+async function exportedMarkdown(steps: Step[]): Promise<string> {
+  vi.mocked(downloadBlob).mockClear();
+  await exportMarkdown(manual(), steps, 'png');
+  const blob = vi.mocked(downloadBlob).mock.calls[0][0] as Blob;
+  const zip = await JSZip.loadAsync(blob);
+  const mdFile = Object.values(zip.files).find((f) => f.name.endsWith('.md'));
+  if (!mdFile) throw new Error('no .md in zip');
+  return mdFile.async('string');
+}
+
+describe('exportMarkdown — jerárquico', () => {
+  beforeEach(() => {
+    vi.mocked(downloadBlob).mockReset();
+  });
+
+  it('índice - **1. Alfa** sin recuento i+1. y heading ## 1.1.', async () => {
+    const md = await exportedMarkdown(THREE_SECTIONS);
+
+    expect(md).toContain('- **1. Alfa**');
+    expect(md).not.toContain('1. **1. Alfa**');
+    expect(md).toContain('## 1.1. A1');
+  });
+});

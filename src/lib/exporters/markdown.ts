@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import type { Manual, Step } from '../../types';
 import { downloadBlob, safeName } from '../blob';
 import { imageExt, reencode, type ImageQuality } from '../image';
+import { numberSteps } from './numbering';
 import { buildTocEntries, tocLine } from './toc';
 
 /**
@@ -39,10 +40,16 @@ export async function exportMarkdown(
   lines.push(`> ${meta.join(' · ')}`, '');
   if (manual.confidentiality) lines.push(`> **${manual.confidentiality.toUpperCase()}**`, '');
 
+  const numbering = numberSteps(steps);
+
   // Índice persistente (mismo criterio que HTML/PDF)
   lines.push('## Índice', '');
   buildTocEntries(steps).forEach((entry, i) => {
     const line = tocLine(entry);
+    if (numbering.hierarchical) {
+      lines.push(`- **${line}**`);
+      return;
+    }
     if (entry.kind === 'section') {
       lines.push(`${i + 1}. **${line}**`);
     } else {
@@ -52,10 +59,12 @@ export async function exportMarkdown(
   lines.push('');
 
   // Cuerpo
-  let actionNo = 0;
-  for (const s of steps) {
+  let fileNo = 0;
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    const numbered = numbering.at[i];
     if (s.kind === 'section') {
-      lines.push(`# ${s.caption || 'Sección'}`, '');
+      lines.push(`# ${numbered?.label ?? (s.caption || 'Sección')}`, '');
       continue;
     }
     if (s.kind === 'note') {
@@ -67,12 +76,12 @@ export async function exportMarkdown(
       continue;
     }
     const img = s.annotated ?? s.screenshot;
-    if (!img) continue;
-    actionNo += 1;
-    const name = `step-${actionNo}.${ext}`;
+    if (!img || !numbered) continue;
+    fileNo += 1;
+    const name = `step-${fileNo}.${ext}`;
     imagesDir.file(name, await reencode(img, quality));
-    lines.push(`## Paso ${actionNo}. ${s.caption}`, '');
-    lines.push(`![Paso ${actionNo}](images/${name})`, '');
+    lines.push(`## ${numbered.label}`, '');
+    lines.push(`![${numbered.token || numbered.caption}](images/${name})`, '');
     if (s.description) lines.push(s.description, '');
 
     // Caminos alternativos (variantes) del paso.
@@ -82,7 +91,7 @@ export async function exportMarkdown(
       lines.push(`**${v.label || `Opción ${vi}`}**`, '');
       const vImg = v.annotated ?? v.screenshot;
       if (vImg) {
-        const vName = `step-${actionNo}-v${vi}.${ext}`;
+        const vName = `step-${fileNo}-v${vi}.${ext}`;
         imagesDir.file(vName, await reencode(vImg, quality));
         lines.push(`![${v.label || `Opción ${vi}`}](images/${vName})`, '');
       }

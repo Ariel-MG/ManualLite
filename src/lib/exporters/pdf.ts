@@ -24,6 +24,7 @@ import {
   type MeasuredBlock,
   type PlacedBlock,
 } from './pdfLayout';
+import { numberSteps } from './numbering';
 import { buildTocEntries, tocLine } from './toc';
 
 // pdfmake necesita su sistema de fuentes virtual (vfs). El shape ha cambiado
@@ -105,12 +106,14 @@ function framedImage(dataUrl: string, width: number, height: number): Content {
 }
 
 function tocContent(steps: PdfStep[], accent: string): Content {
+  const { hierarchical } = numberSteps(steps, { requireSize: true });
   const entries = buildTocEntries(steps, { requireSize: true });
   const body = entries.map((entry, i) => {
     const isSection = entry.kind === 'section';
+    const line = tocLine(entry);
     return [
       {
-        text: `${i + 1}.  ${tocLine(entry)}`,
+        text: hierarchical ? line : `${i + 1}.  ${line}`,
         bold: isSection,
         fontSize: isSection ? 12 : 11,
         color: isSection ? accent : '#111827',
@@ -249,10 +252,12 @@ export async function buildPdfDoc(
   // Construimos cada bloque junto con su altura estimada. Los saltos de página
   // los decide `packBlocks` después, cuando ya conoce todas las alturas.
   const drafts: Draft[] = [];
-  let actionNo = 0;
-  for (const step of steps) {
+  const numbering = numberSteps(steps, { requireSize: true });
+  for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+    const step = steps[stepIndex];
+    const numbered = numbering.at[stepIndex];
     if (step.kind === 'section') {
-      const caption = step.caption || 'Sección';
+      const caption = numbered?.label ?? (step.caption || 'Sección');
       // Cuando la sección continúa en la hoja en curso lleva una regla de color
       // encima para que se lea como corte de sección y no como un paso más.
       const height = textHeight(caption, 19, contentWidth) + 12 + 16;
@@ -325,18 +330,22 @@ export async function buildPdfDoc(
     // Acción (con imagen). El número solo se consume si el paso llega al PDF,
     // para no dejar huecos ("Paso 1, Paso 3") ni divergir de HTML/Markdown.
     const img = step.annotated ?? step.screenshot;
-    if (!img || !step.width || !step.height) continue;
-    actionNo += 1;
+    if (!img || !step.width || !step.height || !numbered) continue;
     const dataUrl = await resolveImageSrc(img, quality);
     if (!dataUrl) continue;
     const [w, h] = imageFit(step.width, step.height, contentWidth, maxImgHeight);
 
-    const headingText = `Paso ${actionNo}   ${step.caption}`;
+    const headingText = numbering.hierarchical
+      ? numbered.label
+      : `${numbered.token}   ${numbered.caption}`;
+    const gap = numbering.hierarchical ? ' ' : '   ';
     const heading = {
-      text: [
-        { text: `Paso ${actionNo}`, color: ACCENT, bold: true },
-        { text: `   ${step.caption}`, color: '#111827', bold: true },
-      ],
+      text: numbered.token
+        ? [
+            { text: numbered.token, color: ACCENT, bold: true },
+            { text: `${gap}${numbered.caption}`, color: '#111827', bold: true },
+          ]
+        : [{ text: numbered.caption, color: '#111827', bold: true }],
       style: 'stepHeading',
       margin: [0, 0, 0, 10],
     } as Content;

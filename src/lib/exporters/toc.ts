@@ -1,43 +1,41 @@
+import { numberSteps, type NumberableStep, type NumberingOptions } from './numbering';
+
 export type TocEntry =
-  | { kind: 'section'; caption: string }
-  | { kind: 'action'; actionNo: number; caption: string };
+  | { kind: 'section'; caption: string; label: string }
+  | { kind: 'action'; actionNo: number; caption: string; label: string };
 
-export interface TocStep {
-  kind?: 'action' | 'section' | 'note' | 'rule';
-  caption: string;
-  screenshot?: unknown;
-  annotated?: unknown;
-  width?: number;
-  height?: number;
-}
+export type TocStep = NumberableStep;
 
-export interface TocOptions {
-  /** El PDF descarta acciones sin width/height; HTML/Markdown no. */
-  requireSize?: boolean;
-}
+export type TocOptions = NumberingOptions;
 
 /**
- * Índice persistente (HTML, PDF y Markdown): secciones en negrita y
- * acciones como "Paso N. caption", en el mismo orden del cuerpo.
+ * Índice persistente (HTML, PDF y Markdown).
+ * Con secciones: solo esas secciones ya etiquetadas.
+ * Sin secciones: acciones como "Paso N. caption", igual que hoy.
  */
 export function buildTocEntries(steps: TocStep[], opts: TocOptions = {}): TocEntry[] {
+  const { hierarchical, at } = numberSteps(steps, opts);
   const entries: TocEntry[] = [];
-  let actionNo = 0;
-  for (const step of steps) {
-    if (step.kind === 'section') {
-      entries.push({ kind: 'section', caption: step.caption || 'Sección' });
+  for (const heading of at) {
+    if (!heading) continue;
+    if (hierarchical) {
+      if (heading.kind === 'section') {
+        entries.push({ kind: 'section', caption: heading.caption, label: heading.label });
+      }
       continue;
     }
-    if (step.kind === 'note' || step.kind === 'rule') continue;
-    const img = step.annotated ?? step.screenshot;
-    if (!img) continue;
-    if (opts.requireSize && (!step.width || !step.height)) continue;
-    actionNo += 1;
-    entries.push({ kind: 'action', actionNo, caption: step.caption });
+    if (heading.kind === 'action') {
+      entries.push({
+        kind: 'action',
+        actionNo: heading.actionNo ?? 0,
+        caption: heading.caption,
+        label: heading.label,
+      });
+    }
   }
   return entries;
 }
 
 export function tocLine(entry: TocEntry): string {
-  return entry.kind === 'section' ? entry.caption : `Paso ${entry.actionNo}. ${entry.caption}`;
+  return entry.label;
 }
