@@ -7,7 +7,7 @@ route: 'dispatch'
 review_loop_iteration: 0
 baseline_commit: 'e168d96b5ea33c5507d66241f2bab55e096d68f0'
 context:
-  - _bmad-output/implementation-artifacts/epic-1-context.md
+  - _bmad-output/implementation-artifacts/epic-secciones-numeradas-context.md
   - _bmad-output/specs/spec-secciones-numeradas/numbering.md
 ---
 

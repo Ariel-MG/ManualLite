@@ -1,0 +1,16 @@
+---
+description: Contextos de epic van con slug de inventario, nunca epic-N-context.md
+globs: _bmad-output/implementation-artifacts/**/*.md
+alwaysApply: false
+---
+
+# Contextos de epic por inventario
+
+No escribas `_bmad-output/implementation-artifacts/epic-<N>-context.md`. Ese path genérico colisiona cuando hay dos cortes con el mismo número de epic.
+
+Usa el slug del inventario:
+
+- `epics.md` (ManualLite v2) → `epic-manuallite-v2-context.md`
+- `epics-secciones-numeradas.md` → `epic-secciones-numeradas-context.md`
+
+Si `bmad-build` / compile-epic-context propone `epic-1-context.md`, guarda en el path slugged y actualiza el `context:` de las specs. En `sprint-status.yaml`, el inventario de secciones numeradas se rastrea como `epic-2` para no colisionar las keys `1-1` / `1-2` de v2.

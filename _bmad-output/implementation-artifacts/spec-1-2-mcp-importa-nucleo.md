@@ -7,7 +7,7 @@ route: 'dispatch'
 review_loop_iteration: 0
 baseline_commit: '14387cc63448ed58747579988c6bc0c2c064fd4c'
 context:
-  - _bmad-output/implementation-artifacts/epic-1-context.md
+  - _bmad-output/implementation-artifacts/epic-manuallite-v2-context.md
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">

@@ -1,6 +1,7 @@
 # Epic 1 Context: El lector distingue procedimientos en el acta
 
-<!-- Compiled from planning artifacts. Edit freely. Regenerate with compile-epic-context if planning docs change. -->
+<!-- Inventario: _bmad-output/planning-artifacts/epics-secciones-numeradas.md. No escribir epic-N-context.md genérico: colisiona con ManualLite v2. -->
+<!-- Compiled from planning artifacts. Edit freely. Regenerate with compile-epic-context if planning docs change; el output debe ser este path, no epic-1-context.md. -->
 
 ## Goal
 
