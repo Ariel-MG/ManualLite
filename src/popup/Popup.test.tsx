@@ -15,18 +15,19 @@ function pending<T>(): Promise<T> {
   return new Promise(() => {});
 }
 
-function installChrome() {
+function installChrome(state?: { recording: boolean; manualId: string | null; stepCount: number }) {
   const open = vi.fn(() => pending<void>());
   const query = vi.fn(() => pending<chrome.tabs.Tab[]>());
+  const rec = state ?? { recording: false, manualId: null, stepCount: 0 };
   vi.stubGlobal('chrome', {
     runtime: {
       sendMessage: vi.fn((msg: RuntimeMessage) => {
         if (msg.type === 'GET_STATE') {
           return Promise.resolve({
-            recording: false,
+            recording: rec.recording,
             paused: false,
-            manualId: null,
-            stepCount: 0,
+            manualId: rec.manualId,
+            stepCount: rec.stepCount,
           });
         }
         return Promise.resolve({ ok: true });
@@ -74,5 +75,13 @@ describe('Popup abre el side panel', () => {
 
     expect(open).toHaveBeenCalledWith({ windowId: -2 });
     expect(open.mock.invocationCallOrder[0]).toBeLessThan(query.mock.invocationCallOrder[0]);
+  });
+
+  it('mientras grabas, Abrir panel llama sidePanel.open en el click', async () => {
+    const { open } = installChrome({ recording: true, manualId: 'm1', stepCount: 2 });
+
+    render(<Popup />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir panel' }));
+    expect(open).toHaveBeenCalledWith({ windowId: -2 });
   });
 });

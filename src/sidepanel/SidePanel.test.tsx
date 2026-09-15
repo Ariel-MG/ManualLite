@@ -1,13 +1,30 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RuntimeMessage } from '../types';
+import type { RuntimeMessage, Step } from '../types';
+import { getSteps } from '../db';
 import { SidePanel } from './SidePanel';
+
+vi.mock('../db', () => ({
+  getSteps: vi.fn(),
+}));
 
 interface ChromeState {
   recording: boolean;
   paused: boolean;
   manualId: string | null;
   stepCount: number;
+}
+
+function sampleSteps(n: number): Step[] {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `s${i + 1}`,
+    manualId: 'm1',
+    order: i,
+    kind: 'action' as const,
+    caption: `Paso ${i + 1}`,
+    screenshot: new Blob(['png'], { type: 'image/png' }),
+    createdAt: i,
+  }));
 }
 
 function installChrome(initial: ChromeState) {
@@ -61,6 +78,8 @@ function installChrome(initial: ChromeState) {
 describe('SidePanel', () => {
   beforeEach(() => {
     vi.stubGlobal('chrome', {});
+    vi.mocked(getSteps).mockReset();
+    vi.mocked(getSteps).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -68,7 +87,7 @@ describe('SidePanel', () => {
     vi.unstubAllGlobals();
   });
 
-  it('muestra el conteo y envía pausa, borrar último y detener', async () => {
+  it('muestra el conteo y envía pausa y detener', async () => {
     const chromeApi = installChrome({
       recording: true,
       paused: false,
@@ -78,20 +97,19 @@ describe('SidePanel', () => {
 
     render(<SidePanel />);
 
-    expect(await screen.findByText('3')).toBeTruthy();
-    expect(screen.getByText('pasos capturados')).toBeTruthy();
+    expect(await screen.findByText('3 pasos')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /Pausar/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Borrar último/ }));
     fireEvent.click(screen.getByRole('button', { name: /Detener/ }));
 
     const types = chromeApi.sendMessage.mock.calls.map((c) => (c[0] as RuntimeMessage).type);
     expect(types).toContain('TOGGLE_PAUSE');
-    expect(types).toContain('DELETE_LAST_STEP');
     expect(types).toContain('STOP_RECORDING');
+    expect(types).not.toContain('DELETE_LAST_STEP');
   });
 
-  it('al borrar el último de tres, el conteo pasa a dos cuando llega RECORDING_CHANGED', async () => {
+  it('borra un paso concreto del filmstrip', async () => {
+    vi.mocked(getSteps).mockResolvedValue(sampleSteps(3));
     const chromeApi = installChrome({
       recording: true,
       paused: false,
@@ -100,9 +118,24 @@ describe('SidePanel', () => {
     });
 
     render(<SidePanel />);
-    expect(await screen.findByText('3')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Borrar paso 2' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /Borrar último/ }));
+    expect(chromeApi.sendMessage).toHaveBeenCalledWith({ type: 'DELETE_STEP', stepId: 's2' });
+  });
+
+  it('al borrar, el conteo pasa a dos cuando llega RECORDING_CHANGED', async () => {
+    vi.mocked(getSteps).mockResolvedValue(sampleSteps(3));
+    const chromeApi = installChrome({
+      recording: true,
+      paused: false,
+      manualId: 'm1',
+      stepCount: 3,
+    });
+
+    render(<SidePanel />);
+    expect(await screen.findByText('3 pasos')).toBeTruthy();
+
+    vi.mocked(getSteps).mockResolvedValue(sampleSteps(2));
     chromeApi.emit({
       type: 'RECORDING_CHANGED',
       recording: true,
@@ -112,7 +145,30 @@ describe('SidePanel', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('2')).toBeTruthy();
+      expect(screen.getByText('2 pasos')).toBeTruthy();
+    });
+  });
+
+  it('guarda el título de una línea al editarlo', async () => {
+    vi.mocked(getSteps).mockResolvedValue(sampleSteps(1));
+    const chromeApi = installChrome({
+      recording: true,
+      paused: false,
+      manualId: 'm1',
+      stepCount: 1,
+    });
+
+    render(<SidePanel />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Paso 1' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Título del paso' }), {
+      target: { value: 'Clic en Guardar' },
+    });
+    fireEvent.blur(screen.getByRole('textbox', { name: 'Título del paso' }));
+
+    expect(chromeApi.sendMessage).toHaveBeenCalledWith({
+      type: 'UPDATE_STEP_CAPTION',
+      stepId: 's1',
+      caption: 'Clic en Guardar',
     });
   });
 
@@ -129,7 +185,7 @@ describe('SidePanel', () => {
     expect(screen.getByRole('button', { name: /Reanudar/ })).toBeTruthy();
   });
 
-  it('muestra «paso capturado» en singular cuando hay un paso', async () => {
+  it('muestra «1 paso» en singular', async () => {
     installChrome({
       recording: true,
       paused: false,
@@ -138,8 +194,8 @@ describe('SidePanel', () => {
     });
 
     render(<SidePanel />);
-    expect(await screen.findByText('paso capturado')).toBeTruthy();
-    expect(screen.queryByText('paso capturados')).toBeNull();
+    expect(await screen.findByText('1 paso')).toBeTruthy();
+    expect(screen.queryByText('1 pasos')).toBeNull();
   });
 
   it('un GET_STATE lento no pisa un RECORDING_CHANGED más nuevo', async () => {
@@ -182,7 +238,7 @@ describe('SidePanel', () => {
       });
     }
 
-    expect(await screen.findByText('4')).toBeTruthy();
+    expect(await screen.findByText('4 pasos')).toBeTruthy();
     expect(screen.getByText('Grabando')).toBeTruthy();
 
     resolveGet?.({
@@ -194,7 +250,7 @@ describe('SidePanel', () => {
 
     await Promise.resolve();
     await waitFor(() => {
-      expect(screen.getByText('4')).toBeTruthy();
+      expect(screen.getByText('4 pasos')).toBeTruthy();
       expect(screen.getByText('Grabando')).toBeTruthy();
       expect(screen.queryByText('Sin grabación')).toBeNull();
     });
@@ -227,7 +283,7 @@ describe('SidePanel', () => {
     });
 
     render(<SidePanel />);
-    expect(await screen.findByText('2')).toBeTruthy();
+    expect(await screen.findByText('2 pasos')).toBeTruthy();
     expect(screen.getByText('Grabando')).toBeTruthy();
     expect(gets).toBe(2);
   });

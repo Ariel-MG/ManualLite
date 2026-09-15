@@ -96,6 +96,9 @@ export type RuntimeMessage =
   | { type: 'STOP_RECORDING' }
   | { type: 'TOGGLE_PAUSE' }
   | { type: 'DELETE_LAST_STEP' }
+  | { type: 'DELETE_STEP'; stepId: string }
+  | { type: 'REORDER_STEPS'; orderedIds: string[] }
+  | { type: 'UPDATE_STEP_CAPTION'; stepId: string; caption: string }
   | { type: 'GET_STATE' }
   | { type: 'STATE'; recording: boolean; paused: boolean; manualId: string | null; stepCount: number }
   | { type: 'CLICK_CAPTURED'; capture: ClickCapture }

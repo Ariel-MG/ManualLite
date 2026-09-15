@@ -9,9 +9,12 @@ import { listenToggleRecording } from './commands';
 import {
   broadcastRecording,
   deleteLastStep,
+  deleteStepById,
   getState,
   handleClick,
+  reorderRecordingSteps,
   setState,
+  updateStepCaption,
 } from './session';
 
 /**
@@ -66,6 +69,18 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
         break;
       case 'DELETE_LAST_STEP':
         await deleteLastStep();
+        sendResponse({ ok: true });
+        break;
+      case 'DELETE_STEP':
+        await deleteStepById(message.stepId);
+        sendResponse({ ok: true });
+        break;
+      case 'REORDER_STEPS':
+        await reorderRecordingSteps(message.orderedIds);
+        sendResponse({ ok: true });
+        break;
+      case 'UPDATE_STEP_CAPTION':
+        await updateStepCaption(message.stepId, message.caption);
         sendResponse({ ok: true });
         break;
       case 'GET_STATE': {

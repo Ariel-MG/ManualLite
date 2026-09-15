@@ -131,8 +131,20 @@ export function Popup() {
             </span>
           </div>
           <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
-            Cada click en la página crea un paso con su captura.
+            Cada click en la página crea un paso. Puedes cerrar el panel; la grabación sigue.
           </p>
+          <button
+            type="button"
+            onClick={() => void openRecordingPanel()}
+            disabled={busy}
+            style={{
+              ...btn('transparent'),
+              color: '#111827',
+              border: '1px solid #d1d5db',
+            }}
+          >
+            Abrir panel
+          </button>
           <button onClick={stop} disabled={busy} style={btn('#111827')}>
             Detener y abrir editor
           </button>

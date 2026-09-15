@@ -1,5 +1,5 @@
 import type { ClickCapture, RuntimeMessage } from '../types';
-import { addStep, countSteps, deleteStep, getSteps } from '../db';
+import { addStep, countSteps, deleteStep, getSteps, reorderSteps, updateStep } from '../db';
 import { annotateScreenshot } from '../lib/annotate';
 import { buildCaption } from '../lib/caption';
 import {
@@ -46,6 +46,31 @@ export async function deleteLastStep(): Promise<void> {
   if (!state.manualId) return;
   const last = lastItem(await getSteps(state.manualId));
   if (last) await deleteStep(last.id);
+  await broadcastRecording(await getState());
+}
+
+export async function deleteStepById(stepId: string): Promise<void> {
+  const state = await getState();
+  if (!state.manualId) return;
+  const match = (await getSteps(state.manualId)).find((s) => s.id === stepId);
+  if (!match) return;
+  await deleteStep(stepId);
+  await broadcastRecording(await getState());
+}
+
+export async function reorderRecordingSteps(orderedIds: string[]): Promise<void> {
+  const state = await getState();
+  if (!state.manualId || orderedIds.length === 0) return;
+  await reorderSteps(state.manualId, orderedIds);
+  await broadcastRecording(await getState());
+}
+
+export async function updateStepCaption(stepId: string, caption: string): Promise<void> {
+  const state = await getState();
+  if (!state.manualId) return;
+  const match = (await getSteps(state.manualId)).find((s) => s.id === stepId);
+  if (!match) return;
+  await updateStep(stepId, { caption });
   await broadcastRecording(await getState());
 }
 
