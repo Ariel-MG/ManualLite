@@ -1,52 +1,13 @@
 import type { Manual, Step } from '../types';
 import { addStep, createManual, getSteps, updateManual } from '../db';
 import { blobToDataURL, downloadBlob, safeName } from './blob';
-
-const FORMAT = 'ManualLite';
-const FORMAT_VERSION = 1;
-
-interface SerializedVariant {
-  label: string;
-  description?: string;
-  width?: number;
-  height?: number;
-  screenshot?: string; // dataURL
-  annotated?: string; // dataURL
-}
-
-interface SerializedStep {
-  kind?: Step['kind'];
-  caption: string;
-  description?: string;
-  url?: string;
-  width?: number;
-  height?: number;
-  click?: Step['click'];
-  clickOnImage?: Step['clickOnImage'];
-  element?: Step['element'];
-  screenshot?: string; // dataURL (solo acciones)
-  annotated?: string; // dataURL
-  variants?: SerializedVariant[];
-}
-
-interface ProjectFile {
-  app: typeof FORMAT;
-  formatVersion: number;
-  exportedAt: number;
-  manual: {
-    title: string;
-    subtitle?: string;
-    accentColor?: string;
-    author?: string;
-    version?: string;
-    company?: string;
-    confidentiality?: string;
-    pageSize?: Manual['pageSize'];
-    createdAt: number;
-    logo?: string; // dataURL
-  };
-  steps: SerializedStep[];
-}
+import {
+  FORMAT,
+  FORMAT_VERSION,
+  parseProjectFile,
+  serializeProjectFile,
+  type ProjectFile,
+} from './projectFile';
 
 async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   return (await fetch(dataUrl)).blob();
@@ -99,16 +60,13 @@ export async function exportProject(manual: Manual, steps: Step[]): Promise<void
     ),
   };
 
-  const blob = new Blob([JSON.stringify(project)], { type: 'application/json' });
+  const blob = new Blob([serializeProjectFile(project)], { type: 'application/json' });
   downloadBlob(blob, `${safeName(manual.title)}.manuallite.json`);
 }
 
 /** Importa un archivo .json y recrea el manual con nuevos ids. Devuelve el id. */
 export async function importProject(file: File): Promise<string> {
-  const parsed = JSON.parse(await file.text()) as ProjectFile;
-  if (parsed.app !== FORMAT || !Array.isArray(parsed.steps)) {
-    throw new Error('El archivo no es un proyecto válido de ManualLite.');
-  }
+  const parsed = parseProjectFile(await file.text());
 
   const manual = await createManual(parsed.manual.title || 'Manual importado');
   await updateManual(manual.id, {
